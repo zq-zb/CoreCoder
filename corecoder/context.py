@@ -23,6 +23,7 @@ def _approx_tokens(text: str) -> int:
     """Rough token count, roughly 3 chars per token for mixed en/zh content."""
     return len(text) // 3
 
+
 # 估算 token 字符数除以3 够用就好 判断的是粗略值
 def estimate_tokens(messages: list[dict]) -> int:
     total = 0
@@ -39,9 +40,10 @@ class ContextManager:
         self.max_tokens = max_tokens
         # layer thresholds (fraction of max_tokens)
         # 三层比例
-        self._snip_at = int(max_tokens * 0.50)    # 50% -> snip tool outputs
+        self._snip_at = int(max_tokens * 0.50)  # 50% -> snip tool outputs
         self._summarize_at = int(max_tokens * 0.70)  # 70% -> LLM summarize
-        self._collapse_at = int(max_tokens * 0.90)   # 90% -> hard collapse
+        self._collapse_at = int(max_tokens * 0.90)  # 90% -> hard collapse
+
     # 估算用的 token 数量，粗略计算，混合中英文大约 3 个字符算一个 token
     def maybe_compress(self, messages: list[dict], llm: LLM | None = None) -> bool:
         """Apply compression layers as needed. Returns True if any compression happened."""
@@ -57,8 +59,8 @@ class ContextManager:
 
         # 第二层：旧对话写个摘要
         # Layer 2: LLM-powered summarization of old turns
-        if current > self._summarize_at and len(messages) > 10: 
-            if self._summarize_old(messages, llm, keep_recent=8): # 留最近 8 条消息原样不动
+        if current > self._summarize_at and len(messages) > 10:
+            if self._summarize_old(messages, llm, keep_recent=8):  # 留最近 8 条消息原样不动
                 compressed = True
                 current = estimate_tokens(messages)
 
@@ -89,11 +91,7 @@ class ContextManager:
             if len(lines) <= 6:
                 continue
             # keep first 3 + last 3 lines
-            snipped = (
-                "\n".join(lines[:3])
-                + f"\n... ({len(lines)} lines, snipped to save context) ...\n"
-                + "\n".join(lines[-3:])
-            )
+            snipped = "\n".join(lines[:3]) + f"\n... ({len(lines)} lines, snipped to save context) ...\n" + "\n".join(lines[-3:])
             m["content"] = snipped
             changed = True
         return changed
@@ -108,14 +106,13 @@ class ContextManager:
         """
         # 安全切分计算
         # 绝对不能把 tool 回复消息和它对应的、带 tool_calls 的 assistant 消息切开
-        split = max(0, len(messages) - keep_recent) # 起始切分索引
+        split = max(0, len(messages) - keep_recent)  # 起始切分索引
         # 切分位置的消息 不是 tool
         while split > 0 and messages[split].get("role") == "tool":
             split -= 1
         return split
 
-    def _summarize_old(self, messages: list[dict], llm: LLM | None,
-                       keep_recent: int = 8) -> bool:
+    def _summarize_old(self, messages: list[dict], llm: LLM | None, keep_recent: int = 8) -> bool:
         """Layer 2: Summarize old conversation, keep recent messages intact."""
         if len(messages) <= keep_recent:
             return False
@@ -127,14 +124,18 @@ class ContextManager:
         summary = self._get_summary(old, llm)
 
         messages.clear()
-        messages.append({
-            "role": "user",
-            "content": f"[Context compressed - conversation summary]\n{summary}",
-        })
-        messages.append({
-            "role": "assistant",
-            "content": "Got it, I have the context from our earlier conversation.",
-        })
+        messages.append(
+            {
+                "role": "user",
+                "content": f"[Context compressed - conversation summary]\n{summary}",
+            }
+        )
+        messages.append(
+            {
+                "role": "assistant",
+                "content": "Got it, I have the context from our earlier conversation.",
+            }
+        )
         messages.extend(tail)
         return True
 
@@ -145,14 +146,18 @@ class ContextManager:
         summary = self._get_summary(messages[:split], llm)
 
         messages.clear()
-        messages.append({
-            "role": "user",
-            "content": f"[Hard context reset]\n{summary}",
-        })
-        messages.append({
-            "role": "assistant",
-            "content": "Context restored. Continuing from where we left off.",
-        })
+        messages.append(
+            {
+                "role": "user",
+                "content": f"[Hard context reset]\n{summary}",
+            }
+        )
+        messages.append(
+            {
+                "role": "assistant",
+                "content": "Context restored. Continuing from where we left off.",
+            }
+        )
         messages.extend(tail)
 
     def _get_summary(self, messages: list[dict], llm: LLM | None) -> str:
@@ -202,6 +207,7 @@ class ContextManager:
         # 压缩降级处理方案：不调大模型，0 token 成本
         # 「操作过的文件」和「出现过的错误」，生成一份极简摘要
         import re
+
         files_seen = set()
         errors = []
 
@@ -209,7 +215,7 @@ class ContextManager:
             text = m.get("content", "") or ""
             # extract file paths
             # 粗略地把文件路径提取出来，作为文件操作摘要
-            for match in re.finditer(r'[\w./\-]+\.\w{1,5}', text):
+            for match in re.finditer(r"[\w./\-]+\.\w{1,5}", text):
                 files_seen.add(match.group())
             # extract error lines
             # 粗略地把包含 error 的行提取出来，作为错误摘要

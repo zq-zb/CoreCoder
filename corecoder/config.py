@@ -9,6 +9,7 @@ def _load_dotenv():
     """Load .env from cwd, walking up to home dir. No-op if python-dotenv missing."""
     try:
         from dotenv import load_dotenv
+
         # search cwd first, then parent dirs up to ~
         env_path = Path(".env")
         if not env_path.exists():
@@ -57,9 +58,7 @@ def parse_config(env=None) -> Config:
         try:
             value = int(raw)
         except ValueError:
-            raise ValueError(
-                f"Invalid value for {name}: {raw!r} (expected an integer)"
-            ) from None
+            raise ValueError(f"Invalid value for {name}: {raw!r} (expected an integer)") from None
         if value <= 0:
             raise ValueError(f"Invalid value for {name}: {raw!r} (must be positive)")
         return value
@@ -71,17 +70,10 @@ def parse_config(env=None) -> Config:
         try:
             return float(raw)
         except ValueError:
-            raise ValueError(
-                f"Invalid value for {name}: {raw!r} (expected a number)"
-            ) from None
+            raise ValueError(f"Invalid value for {name}: {raw!r} (expected a number)") from None
 
     # pick up common api keys automatically
-    api_key = (
-        env.get("CORECODER_API_KEY")
-        or env.get("OPENAI_API_KEY")
-        or env.get("DEEPSEEK_API_KEY")
-        or ""
-    )
+    api_key = env.get("CORECODER_API_KEY") or env.get("OPENAI_API_KEY") or env.get("DEEPSEEK_API_KEY") or ""
     return Config(
         model=env.get("CORECODER_MODEL", "gpt-5.5"),
         api_key=api_key,

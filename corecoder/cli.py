@@ -40,6 +40,7 @@ def main():
 
     if args.demo:
         from .demo import run_demo
+
         raise SystemExit(run_demo())
 
     try:
@@ -104,9 +105,11 @@ def main():
     # interactive REPL
     _repl(agent, config)
 
+
 # 一次性模式：能被脚本调用
 def _run_once(agent: Agent, prompt: str):
     """Non-interactive: run one prompt and exit."""
+
     def on_token(tok):
         print(tok, end="", flush=True)
 
@@ -115,10 +118,10 @@ def _run_once(agent: Agent, prompt: str):
 
     try:
         agent.chat(prompt, on_token=on_token, on_tool=on_tool)
-    except KeyboardInterrupt: # ctrl +C 打断
+    except KeyboardInterrupt:  # ctrl +C 打断
         console.print("\n[yellow]Interrupted.[/yellow]")
         sys.exit(130)
-    except Exception as e: # 出错
+    except Exception as e:  # 出错
         console.print(f"\n[red]Error: {e}[/red]")
         sys.exit(1)
     print()
@@ -126,13 +129,15 @@ def _run_once(agent: Agent, prompt: str):
 
 def _repl(agent: Agent, config: Config):
     """Interactive read-eval-print loop."""
-    console.print(Panel(
-        f"[bold]CoreCoder[/bold] v{__version__}\n"
-        f"Model: [cyan]{config.model}[/cyan]"
-        + (f"  Base: [dim]{config.base_url}[/dim]" if config.base_url else "")
-        + "\nType [bold]/help[/bold] for commands, [bold]Ctrl+C[/bold] to cancel, [bold]quit[/bold] to exit.",
-        border_style="blue",
-    ))
+    console.print(
+        Panel(
+            f"[bold]CoreCoder[/bold] v{__version__}\n"
+            f"Model: [cyan]{config.model}[/cyan]"
+            + (f"  Base: [dim]{config.base_url}[/dim]" if config.base_url else "")
+            + "\nType [bold]/help[/bold] for commands, [bold]Ctrl+C[/bold] to cancel, [bold]quit[/bold] to exit.",
+            border_style="blue",
+        )
+    )
 
     hist_path = os.path.expanduser("~/.corecoder_history")
     history = FileHistory(hist_path)
@@ -143,6 +148,7 @@ def _repl(agent: Agent, config: Config):
     @kb.add("enter")
     def _submit(event):
         event.current_buffer.validate_and_handle()
+
     # 回车 +  Esc 组合键插入换行符
     @kb.add("escape", "enter")
     def _newline(event):
@@ -177,7 +183,7 @@ def _repl(agent: Agent, config: Config):
         if user_input == "/tokens":
             p = agent.llm.total_prompt_tokens
             c = agent.llm.total_completion_tokens
-            line = f"Tokens: [cyan]{p}[/cyan] prompt + [cyan]{c}[/cyan] completion = [bold]{p+c}[/bold] total"
+            line = f"Tokens: [cyan]{p}[/cyan] prompt + [cyan]{c}[/cyan] completion = [bold]{p + c}[/bold] total"
             cost = agent.llm.estimated_cost
             if cost is not None:
                 line += f"  (~${cost:.4f})"
@@ -194,6 +200,7 @@ def _repl(agent: Agent, config: Config):
             continue
         if user_input == "/compact":
             from .context import estimate_tokens
+
             before = estimate_tokens(agent.messages)
             compressed = agent.context.maybe_compress(agent.messages, agent.llm)
             after = estimate_tokens(agent.messages)
@@ -209,6 +216,7 @@ def _repl(agent: Agent, config: Config):
             continue
         if user_input == "/diff":
             from .tools.edit import _changed_files
+
             if not _changed_files:
                 console.print("[dim]No files modified this session.[/dim]")
             else:
@@ -232,10 +240,12 @@ def _repl(agent: Agent, config: Config):
 
         # call the agent
         streamed: list[str] = []
+
         # 让模型的文章流式输出，而不是一次性输出
         def on_token(tok):
             streamed.append(tok)
             print(tok, end="", flush=True)
+
         # 调用工具时的回调函数，打印工具调用信息（读什么文件、跑哪条命令）
         def on_tool(name, kwargs):
             console.print(f"\n[dim]> {name}({_brief(kwargs)})[/dim]")
@@ -253,26 +263,28 @@ def _repl(agent: Agent, config: Config):
             console.print(f"\n[red]Error: {e}[/red]")
 
 
-def _show_help(): # 能力暴露开关
-    console.print(Panel(
-        "[bold]Commands:[/bold]\n"
-        "  /help          Show this help\n"
-        "  /reset         Clear conversation history\n"
-        "  /model         Show current model\n"
-        "  /model <name>  Switch model mid-conversation\n"
-        "  /tokens        Show token usage\n"
-        "  /compact       Compress conversation context\n"
-        "  /diff          Show files modified this session\n"
-        "  /save          Save session to disk\n"
-        "  /sessions      List saved sessions\n"
-        "  quit           Exit CoreCoder\n"
-        "\n"
-        "[bold]Input:[/bold]\n"
-        "  Enter          Submit message\n"
-        "  Esc+Enter      Insert newline (for pasting code)",
-        title="CoreCoder Help",
-        border_style="dim",
-    ))
+def _show_help():  # 能力暴露开关
+    console.print(
+        Panel(
+            "[bold]Commands:[/bold]\n"
+            "  /help          Show this help\n"
+            "  /reset         Clear conversation history\n"
+            "  /model         Show current model\n"
+            "  /model <name>  Switch model mid-conversation\n"
+            "  /tokens        Show token usage\n"
+            "  /compact       Compress conversation context\n"
+            "  /diff          Show files modified this session\n"
+            "  /save          Save session to disk\n"
+            "  /sessions      List saved sessions\n"
+            "  quit           Exit CoreCoder\n"
+            "\n"
+            "[bold]Input:[/bold]\n"
+            "  Enter          Submit message\n"
+            "  Esc+Enter      Insert newline (for pasting code)",
+            title="CoreCoder Help",
+            border_style="dim",
+        )
+    )
 
 
 def _brief(kwargs: dict, maxlen: int = 80) -> str:
