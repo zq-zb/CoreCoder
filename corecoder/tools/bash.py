@@ -19,6 +19,7 @@ from .base import Tool
 _local = threading.local()
 
 # patterns that could wreck the filesystem or leak secrets
+# 危险命令模式，可能破坏文件系统或泄露敏感信息
 _DANGEROUS_PATTERNS = [
     # recursive delete aimed at root/home (force flag optional)
     (r"\brm\s+(-\w*)?-r\w*\s+(/|~|\$HOME)", "recursive delete on home/root"),
@@ -58,7 +59,7 @@ class BashTool(Tool):
     }
 
     def execute(self, command: str, timeout: int = 120) -> str:
-        # safety check
+        # safety check 安全检查，拦截危险命令
         warning = _check_dangerous(command)
         if warning:
             return f"⚠ Blocked: {warning}\nCommand: {command}\nIf intentional, modify the command to be more specific."
@@ -112,6 +113,7 @@ def _update_cwd(command: str, current_cwd: str):
     """Track directory changes from cd commands, per thread."""
     # walk each cd in a && chain, resolving relative targets against the dir the
     # previous cd landed in (not the original cwd) so `cd a && cd b` ends in a/b
+    # 如果有多个 cd 命令，则按顺序执行，确保每个 cd 的目标目录是上一个 cd 的结果
     running = current_cwd
     changed = False
     for part in command.split("&&"):

@@ -42,7 +42,11 @@ def main():
         from .demo import run_demo
         raise SystemExit(run_demo())
 
-    config = Config.from_env()
+    try:
+        config = Config.from_env()
+    except ValueError as e:
+        console.print(f"[red bold]Config error:[/] {e}")
+        sys.exit(1)
 
     # CLI args override env vars
     if args.model:
@@ -100,7 +104,7 @@ def main():
     # interactive REPL
     _repl(agent, config)
 
-
+# 一次性模式：能被脚本调用
 def _run_once(agent: Agent, prompt: str):
     """Non-interactive: run one prompt and exit."""
     def on_token(tok):
@@ -111,10 +115,10 @@ def _run_once(agent: Agent, prompt: str):
 
     try:
         agent.chat(prompt, on_token=on_token, on_tool=on_tool)
-    except KeyboardInterrupt:
+    except KeyboardInterrupt: # ctrl +C 打断
         console.print("\n[yellow]Interrupted.[/yellow]")
         sys.exit(130)
-    except Exception as e:
+    except Exception as e: # 出错
         console.print(f"\n[red]Error: {e}[/red]")
         sys.exit(1)
     print()
@@ -139,7 +143,7 @@ def _repl(agent: Agent, config: Config):
     @kb.add("enter")
     def _submit(event):
         event.current_buffer.validate_and_handle()
-
+    # 回车 +  Esc 组合键插入换行符
     @kb.add("escape", "enter")
     def _newline(event):
         event.current_buffer.insert_text("\n")
@@ -220,7 +224,7 @@ def _repl(agent: Agent, config: Config):
                 for s in sessions:
                     console.print(f"  [cyan]{s['id']}[/cyan] ({s['model']}, {s['saved_at']}) {s['preview']}")
             continue
-
+        # 不在名单上的输入，提示没这个命令
         # an unknown /command shouldn't be sent to the model as a prompt
         if user_input.startswith("/"):
             console.print(f"[yellow]Unknown command: {user_input.split()[0]} (try /help)[/yellow]")
@@ -228,11 +232,11 @@ def _repl(agent: Agent, config: Config):
 
         # call the agent
         streamed: list[str] = []
-
+        # 让模型的文章流式输出，而不是一次性输出
         def on_token(tok):
             streamed.append(tok)
             print(tok, end="", flush=True)
-
+        # 调用工具时的回调函数，打印工具调用信息（读什么文件、跑哪条命令）
         def on_tool(name, kwargs):
             console.print(f"\n[dim]> {name}({_brief(kwargs)})[/dim]")
 
@@ -249,7 +253,7 @@ def _repl(agent: Agent, config: Config):
             console.print(f"\n[red]Error: {e}[/red]")
 
 
-def _show_help():
+def _show_help(): # 能力暴露开关
     console.print(Panel(
         "[bold]Commands:[/bold]\n"
         "  /help          Show this help\n"

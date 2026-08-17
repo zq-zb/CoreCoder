@@ -10,7 +10,7 @@ The sub-agent runs to completion and returns a text summary.
 
 from .base import Tool
 
-
+# 独立上下文的分身 Agent 去干重活，在自己的窗口里这套，干完把一个总结交回来。避免污染主 Agent 的上下文。
 class AgentTool(Tool):
     name = "agent"
     description = (
@@ -41,8 +41,9 @@ class AgentTool(Tool):
         from ..agent import Agent
 
         parent = self._parent_agent
-        sub = Agent(
+        sub = Agent(  # 子 Agent 继承父 Agent 的 LLM、工具、上下文限制，但不继承对话历史
             llm=parent.llm,
+            # 不给子 Agent 递归的 agent 工具，避免无限嵌套
             tools=[t for t in parent.tools if t.name != "agent"],  # no recursive agents
             max_context_tokens=parent.context.max_tokens,
             max_rounds=20,
@@ -50,6 +51,7 @@ class AgentTool(Tool):
 
         try:
             result = sub.chat(task)
+            # 返回结果截到 5000 字符，避免污染父 Agent 的上下文
             # trim long results to avoid blowing up parent's context
             if len(result) > 5000:
                 result = result[:4500] + "\n... (sub-agent output truncated)"

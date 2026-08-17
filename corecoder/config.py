@@ -37,21 +37,57 @@ class Config:
 
     @classmethod
     def from_env(cls) -> "Config":
-        # load .env if present (won't override existing env vars)
-        _load_dotenv()
-        # pick up common env vars automatically
-        api_key = (
-            os.getenv("CORECODER_API_KEY")
-            or os.getenv("OPENAI_API_KEY")
-            or os.getenv("DEEPSEEK_API_KEY")
-            or ""
-        )
-        return cls(
-            model=os.getenv("CORECODER_MODEL", "gpt-5.5"),
-            api_key=api_key,
-            base_url=os.getenv("OPENAI_BASE_URL") or os.getenv("CORECODER_BASE_URL"),
-            max_tokens=int(os.getenv("CORECODER_MAX_TOKENS", "4096")),
-            temperature=float(os.getenv("CORECODER_TEMPERATURE", "0")),
-            max_context_tokens=int(os.getenv("CORECODER_MAX_CONTEXT", "128000")),
-            provider=os.getenv("CORECODER_PROVIDER", "openai"),
-        )
+        return parse_config()
+
+
+def parse_config(env=None) -> Config:
+    """Build a Config from environment variables, with error handling.
+
+    Malformed values (e.g. ``CORECODER_MAX_TOKENS=abc``) raise a ``ValueError``
+    naming the offending variable instead of crashing with a bare traceback.
+    """
+    # load .env if present (won't override existing env vars)
+    _load_dotenv()
+    env = env if env is not None else os.environ
+
+    def _get_int(name: str, default: int) -> int:
+        raw = env.get(name)
+        if raw is None or raw.strip() == "":
+            return default
+        try:
+            value = int(raw)
+        except ValueError:
+            raise ValueError(
+                f"Invalid value for {name}: {raw!r} (expected an integer)"
+            ) from None
+        if value <= 0:
+            raise ValueError(f"Invalid value for {name}: {raw!r} (must be positive)")
+        return value
+
+    def _get_float(name: str, default: float) -> float:
+        raw = env.get(name)
+        if raw is None or raw.strip() == "":
+            return default
+        try:
+            return float(raw)
+        except ValueError:
+            raise ValueError(
+                f"Invalid value for {name}: {raw!r} (expected a number)"
+            ) from None
+
+    # pick up common api keys automatically
+    api_key = (
+        env.get("CORECODER_API_KEY")
+        or env.get("OPENAI_API_KEY")
+        or env.get("DEEPSEEK_API_KEY")
+        or ""
+    )
+    return Config(
+        model=env.get("CORECODER_MODEL", "gpt-5.5"),
+        api_key=api_key,
+        base_url=env.get("OPENAI_BASE_URL") or env.get("CORECODER_BASE_URL"),
+        max_tokens=_get_int("CORECODER_MAX_TOKENS", 4096),
+        temperature=_get_float("CORECODER_TEMPERATURE", 0.0),
+        max_context_tokens=_get_int("CORECODER_MAX_CONTEXT", 128_000),
+        provider=env.get("CORECODER_PROVIDER", "openai"),
+    )

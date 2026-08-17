@@ -23,7 +23,7 @@ def _approx_tokens(text: str) -> int:
     """Rough token count, roughly 3 chars per token for mixed en/zh content."""
     return len(text) // 3
 
-
+# 估算 token 字符数除以3 够用就好 判断的是粗略值
 def estimate_tokens(messages: list[dict]) -> int:
     total = 0
     for m in messages:
@@ -38,28 +38,32 @@ class ContextManager:
     def __init__(self, max_tokens: int = 128_000):
         self.max_tokens = max_tokens
         # layer thresholds (fraction of max_tokens)
+        # 三层比例
         self._snip_at = int(max_tokens * 0.50)    # 50% -> snip tool outputs
         self._summarize_at = int(max_tokens * 0.70)  # 70% -> LLM summarize
         self._collapse_at = int(max_tokens * 0.90)   # 90% -> hard collapse
-
+    # 估算用的 token 数量，粗略计算，混合中英文大约 3 个字符算一个 token
     def maybe_compress(self, messages: list[dict], llm: LLM | None = None) -> bool:
         """Apply compression layers as needed. Returns True if any compression happened."""
         current = estimate_tokens(messages)
         compressed = False
 
+        # 第一层：旧的工具输出过长，截断为首尾几行
         # Layer 1: snip verbose tool outputs
         if current > self._snip_at:
             if self._snip_tool_outputs(messages):
                 compressed = True
                 current = estimate_tokens(messages)
 
+        # 第二层：旧对话写个摘要
         # Layer 2: LLM-powered summarization of old turns
-        if current > self._summarize_at and len(messages) > 10:
-            if self._summarize_old(messages, llm, keep_recent=8):
+        if current > self._summarize_at and len(messages) > 10: 
+            if self._summarize_old(messages, llm, keep_recent=8): # 留最近 8 条消息原样不动
                 compressed = True
                 current = estimate_tokens(messages)
 
         # Layer 3: hard collapse - last resort
+        # 第三层：只保留最后几条消息 + 摘要，丢掉其他所有内容
         if current > self._collapse_at and len(messages) > 4:
             self._hard_collapse(messages, llm)
             compressed = True
@@ -73,6 +77,7 @@ class ContextManager:
         This mirrors Claude Code's HISTORY_SNIP which replaces old tool outputs
         with a one-line summary to reclaim context space.
         """
+        # 纯文本处理：超过 1500 字符的工具输出，截断为首尾各三行，中间省略
         changed = False
         for m in messages:
             if m.get("role") != "tool":
@@ -101,7 +106,10 @@ class ContextManager:
         assistant message whose tool_calls produced it - an orphaned tool
         message has no preceding tool_calls and OpenAI-compatible APIs reject it.
         """
-        split = max(0, len(messages) - keep_recent)
+        # 安全切分计算
+        # 绝对不能把 tool 回复消息和它对应的、带 tool_calls 的 assistant 消息切开
+        split = max(0, len(messages) - keep_recent) # 起始切分索引
+        # 切分位置的消息 不是 tool
         while split > 0 and messages[split].get("role") == "tool":
             split -= 1
         return split
@@ -150,7 +158,8 @@ class ContextManager:
     def _get_summary(self, messages: list[dict], llm: LLM | None) -> str:
         """Generate summary via LLM or fallback to extraction."""
         flat = self._flatten(messages)
-
+        # 保留改过的文件路径、做过的关键决定、遇到的错误、当前任务状态；
+        #   丢掉啰嗦的命令输出、代码清单、来回的废话。这正是一个长任务里真正需要被记住的东西。
         if llm:
             try:
                 resp = llm.chat(
@@ -173,6 +182,8 @@ class ContextManager:
                 pass
 
         # fallback: extract key lines
+        # 没有可用模型：退化成提取关键行，保留文件路径、错误、决策
+        # 用正则把文件路径和带 error 的行抽出来拼一个粗摘要。
         return self._extract_key_info(messages)
 
     @staticmethod
@@ -188,6 +199,8 @@ class ContextManager:
     @staticmethod
     def _extract_key_info(messages: list[dict]) -> str:
         """Fallback: extract file paths, errors, and decisions without LLM."""
+        # 压缩降级处理方案：不调大模型，0 token 成本
+        # 「操作过的文件」和「出现过的错误」，生成一份极简摘要
         import re
         files_seen = set()
         errors = []
@@ -195,14 +208,17 @@ class ContextManager:
         for m in messages:
             text = m.get("content", "") or ""
             # extract file paths
+            # 粗略地把文件路径提取出来，作为文件操作摘要
             for match in re.finditer(r'[\w./\-]+\.\w{1,5}', text):
                 files_seen.add(match.group())
             # extract error lines
+            # 粗略地把包含 error 的行提取出来，作为错误摘要
             for line in text.splitlines():
                 if "error" in line.lower():
                     errors.append(line.strip()[:150])
 
         parts = []
+        # 拼接结果，文件最多 20 个，错误最多 5 个
         if files_seen:
             parts.append(f"Files touched: {', '.join(sorted(files_seen)[:20])}")
         if errors:

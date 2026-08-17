@@ -14,14 +14,15 @@ SESSIONS_DIR = Path.home() / ".corecoder" / "sessions"
 _SAFE_SESSION_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _MAX_SESSION_ID_LEN = 100  # keep filenames comfortably under the OS limit
 
-
+# id 规整为安全的文件名，或生成新的 id
 def _normalize_session_id(session_id: str | None) -> str:
     if not session_id:
         return _new_session_id()
-
+    # 反斜杠替换为正斜杠，取最后一段作为文件名
     name = session_id.strip().replace("\\", "/").split("/")[-1]
+    # 只保留安全字符，去掉首尾的点、下划线和连字符
     name = _SAFE_SESSION_RE.sub("-", name).strip(".-_")
-    if len(name) > _MAX_SESSION_ID_LEN:
+    if len(name) > _MAX_SESSION_ID_LEN: # 超过最大长度，截断
         name = name[:_MAX_SESSION_ID_LEN].strip(".-_")
     return name or _new_session_id()
 
@@ -29,10 +30,11 @@ def _normalize_session_id(session_id: str | None) -> str:
 def _new_session_id() -> str:
     return f"session_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
 
-
+# 获取 session 文件路径，确保在 SESSIONS_DIR 下
 def _session_path(session_id: str) -> Path:
     path = (SESSIONS_DIR / f"{_normalize_session_id(session_id)}.json").resolve()
-    root = SESSIONS_DIR.resolve()
+    # 检查父目录是会话记录目录，防止路径穿越攻击
+    root = SESSIONS_DIR.resolve() # resolve() 解析符号链接，返回绝对路径
     if root != path.parent:
         raise ValueError("Invalid session id")
     return path
@@ -61,7 +63,8 @@ def load_session(session_id: str) -> tuple[list[dict], str] | None:
     path = _session_path(session_id)
     if not path.exists():
         return None
-
+    # 读取 JSON 文件，返回消息列表和模型名称
+    # 如果文件损坏或缺少字段，则返回 None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return data["messages"], data["model"]

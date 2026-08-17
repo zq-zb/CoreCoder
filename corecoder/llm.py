@@ -52,7 +52,7 @@ class LLMResponse:
 # pricing per million tokens: (input, output)
 # sources: openai.com/api/pricing, api-docs.deepseek.com, platform.claude.com,
 #          platform.moonshot.ai, alibabacloud.com/help/en/model-studio
-_PRICING = {
+_PRICING = { # 计算钱
     # OpenAI - current flagships
     "gpt-5.5": (5, 30),
     "gpt-5.4": (2.5, 15),
@@ -120,7 +120,7 @@ class LLM:
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
 
-    @property
+    @property # 计算价格 token * 单价
     def estimated_cost(self) -> float | None:
         """Rough cost estimate in USD. Returns None if model not in pricing table."""
         pricing = _PRICING.get(self.model)
@@ -151,6 +151,7 @@ class LLM:
         # stream_options is an OpenAI extension; fall back only when the provider
         # rejects the param (400 BadRequest), not on transient errors that
         # _call_with_retry already exhausted - otherwise we'd double the retries
+        # 参数被拒（不是瞬时性错误），避免重试两次——降级，去参数后重新发起请求
         params["stream_options"] = {"include_usage": True}
         try:
             stream = self._call_with_retry(params)
@@ -165,6 +166,7 @@ class LLM:
 
         for chunk in stream:
             # usage info comes in the final chunk
+            # 返回 token 计数
             if chunk.usage:
                 # some providers send usage with null fields; coerce to 0 so the
                 # running totals below don't blow up on int + None
@@ -182,6 +184,7 @@ class LLM:
                     on_token(delta.content)
 
             # accumulate tool calls across chunks
+            # 工具调用可能跨多个 chunk 发送，按 index 累积，最后再解析成完整的工具调用列表
             if delta.tool_calls:
                 for tc_delta in delta.tool_calls:
                     idx = tc_delta.index
@@ -197,14 +200,15 @@ class LLM:
 
         # parse accumulated tool calls
         parsed: list[ToolCall] = []
+        # 收完了所有 chunk 后，按 index 排序，解析成完整的工具调用列表
         for idx in sorted(tc_map):
             raw = tc_map[idx]
             try:
                 args = json.loads(raw["args"])
-            except (json.JSONDecodeError, KeyError):
+            except (json.JSONDecodeError, KeyError): # 字符串不是合法的 JSON，或者没有 args 字段
                 args = {}
             parsed.append(ToolCall(id=raw["id"], name=raw["name"], arguments=args))
-
+        # 累加 token 计数，方便后续估算成本
         self.total_prompt_tokens += prompt_tok
         self.total_completion_tokens += completion_tok
 
@@ -214,26 +218,30 @@ class LLM:
             prompt_tokens=prompt_tok,
             completion_tokens=completion_tok,
         )
-
+    # 重试机制，处理 transient 错误，指数退避（不触发降级逻辑）
     def _call_with_retry(self, params: dict, max_retries: int = 3):
         """Retry on transient errors with exponential backoff."""
+        # 瞬时故障：限流、超时、连接错误——指数退避重试
         for attempt in range(max_retries):
             try:
                 return self.client.chat.completions.create(**params)
             except (RateLimitError, APITimeoutError, APIConnectionError):
                 if attempt == max_retries - 1:
                     raise
-                wait = 2 ** attempt
+                wait = 2 ** attempt # 指数退避等待时间
                 time.sleep(wait)
             except APIError as e:
+            # 客户端 4xx 错误（参数错、鉴权失败）不重试，服务端 5xx 错误重试
                 # retry 5xx server errors but not 4xx; base APIError has no status_code so read it defensively
                 status_code = getattr(e, "status_code", None)
                 if status_code and status_code >= 500 and attempt < max_retries - 1:
                     time.sleep(2 ** attempt)
                 else:
                     raise
+            # 大量 provider 专属逻辑（fallback、硬预算） 按需加入
 
-
+# 不兼容 OpenAI 的 provider（AWS Bedrock、Google Vertex 等）使用 LiteLLM 后端，
+# 通过单一接口路由到 100+ 个 provider。设置 CORECODER_PROVIDER=litellm。
 class LiteLLM(LLM):
     """LLM backend via LiteLLM, supporting 100+ providers.
 
