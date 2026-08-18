@@ -1,4 +1,4 @@
-"""MCP 客户端第一阶段测试：通过 stdio 发现工具。"""
+"""MCP 客户端集成测试：通过 stdio 发现并调用工具。"""
 
 import asyncio
 import sys

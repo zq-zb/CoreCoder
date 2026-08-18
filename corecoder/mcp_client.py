@@ -1,4 +1,4 @@
-"""MCP 客户端的最小实现：启动 stdio Server 并发现它提供的工具。"""
+"""MCP 客户端的最小实现：启动 stdio Server、发现并调用它提供的工具。"""
 
 from __future__ import annotations
 
