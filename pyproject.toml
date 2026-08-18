@@ -28,6 +28,7 @@ classifiers = [
     "Topic :: Terminals",
 ]
 dependencies = [
+    "mcp>=2,<3",
     "openai>=1.0",
     "rich>=13.0",
     "prompt_toolkit>=3.0",
@@ -52,3 +53,8 @@ Issues = "https://github.com/he-yufeng/CoreCoder/issues"
 [tool.ruff]
 line-length = 130
 target-version = "py310"
+
+[tool.ruff.lint]
+# 工具层和 CLI 位于程序边界，需要把第三方异常转换成可读错误信息；
+# 工具的 JSON Schema 也是有意共享的只读类级元数据。
+ignore = ["BLE001", "RUF012", "S110"]

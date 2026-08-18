@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import threading
+
 from .base import Tool
 
 # Track cwd across commands (Claude Code does this too). Thread-local, so that
@@ -71,6 +72,7 @@ class BashTool(Tool):
             proc = subprocess.run(
                 command,
                 shell=True,
+                check=False,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
