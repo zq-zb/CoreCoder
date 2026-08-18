@@ -6,9 +6,11 @@ import argparse
 import asyncio
 import sys
 from dataclasses import dataclass
+from typing import Any
 
 from mcp import Client, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.types import TextContent
 
 
 @dataclass(frozen=True)
@@ -21,6 +23,34 @@ class DiscoveredTool:
     name: str
     description: str
     input_schema: dict
+
+
+@dataclass(frozen=True)
+class MCPToolCallResult:
+    """CoreCoder 统一后的 MCP 工具调用结果。
+
+    ``text`` 适合直接显示或写入 Agent 对话历史；``is_error`` 用来区分
+    “协议调用成功但工具执行失败”；``structured_content`` 则保留 Server
+    可能返回的结构化数据，避免在文本转换时丢失信息。
+    """
+
+    text: str
+    is_error: bool
+    structured_content: Any | None = None
+
+
+def _content_to_text(content: list[Any]) -> str:
+    """把 MCP 内容块转换成当前文本型 Agent 可以消费的字符串。"""
+
+    parts: list[str] = []
+    for item in content:
+        if isinstance(item, TextContent):
+            parts.append(item.text)
+        else:
+            # 当前 CoreCoder 还是纯文本 Agent。遇到图片、音频或资源时先留下
+            # 类型提示；后续实现多模态消息时可以在这里增加专门的转换逻辑。
+            parts.append(f"[暂不支持的 MCP 内容类型: {item.type}]")
+    return "\n".join(parts)
 
 
 async def discover_stdio_tools(
@@ -54,6 +84,36 @@ async def discover_stdio_tools(
             )
             for tool in response.tools
         ]
+
+
+async def call_stdio_tool(
+    command: str,
+    name: str,
+    arguments: dict[str, Any] | None = None,
+    args: list[str] | None = None,
+) -> MCPToolCallResult:
+    """启动 stdio MCP Server，调用一个工具并返回统一后的结果。
+
+    连接生命周期与工具发现保持一致：进入 ``async with`` 时启动并握手，
+    调用结束或发生异常后退出代码块，SDK 会负责关闭连接和 Server 子进程。
+
+    Args:
+        command: 启动 Server 的可执行程序。
+        name: MCP Server 中注册的工具名称。
+        arguments: 传给工具的参数，键和值必须符合工具的 inputSchema。
+        args: 传给 Server 可执行程序的启动参数。
+    """
+
+    server = StdioServerParameters(command=command, args=args or [])
+    transport = stdio_client(server)
+    async with Client(transport) as client:
+        response = await client.call_tool(name=name, arguments=arguments or {})
+
+    return MCPToolCallResult(
+        text=_content_to_text(response.content),
+        is_error=response.is_error,
+        structured_content=response.structured_content,
+    )
 
 
 def main() -> None:
