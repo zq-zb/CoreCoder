@@ -13,6 +13,7 @@ CoreCoder implements the same idea in 3 layers:
 """
 
 from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -52,17 +53,15 @@ class ContextManager:
 
         # 第一层：旧的工具输出过长，截断为首尾几行
         # Layer 1: snip verbose tool outputs
-        if current > self._snip_at:
-            if self._snip_tool_outputs(messages):
-                compressed = True
-                current = estimate_tokens(messages)
+        if current > self._snip_at and self._snip_tool_outputs(messages):
+            compressed = True
+            current = estimate_tokens(messages)
 
         # 第二层：旧对话写个摘要
         # Layer 2: LLM-powered summarization of old turns
-        if current > self._summarize_at and len(messages) > 10:
-            if self._summarize_old(messages, llm, keep_recent=8):  # 留最近 8 条消息原样不动
-                compressed = True
-                current = estimate_tokens(messages)
+        if current > self._summarize_at and len(messages) > 10 and self._summarize_old(messages, llm, keep_recent=8):
+            compressed = True
+            current = estimate_tokens(messages)
 
         # Layer 3: hard collapse - last resort
         # 第三层：只保留最后几条消息 + 摘要，丢掉其他所有内容

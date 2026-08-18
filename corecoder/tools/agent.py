@@ -10,6 +10,7 @@ The sub-agent runs to completion and returns a text summary.
 
 from .base import Tool
 
+
 # 独立上下文的分身 Agent 去干重活，在自己的窗口里这套，干完把一个总结交回来。避免污染主 Agent 的上下文。
 class AgentTool(Tool):
     name = "agent"
