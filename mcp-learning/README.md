@@ -4,3 +4,4 @@
 
 - `01-mcp-first-connection.md`：连接 stdio Server 并发现工具。
 - `03-mcp-persistent-client.md`：复用连接并安全管理资源生命周期。
+- `04-mcp-agent-adapter.md`：将 MCP 工具动态适配并接入 Agent。
