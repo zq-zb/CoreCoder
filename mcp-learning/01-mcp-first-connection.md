@@ -1,4 +1,4 @@
-# 08 · MCP 第一小步：连接 Server 并发现工具
+# 01 · MCP 第一小步：连接 Server 并发现工具
 
 这一阶段只回答一个问题：**CoreCoder 怎样知道一个外部 MCP Server 会做什么？**
 
