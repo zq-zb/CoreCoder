@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from typing import Any
 
@@ -37,6 +38,99 @@ class MCPToolCallResult:
     text: str
     is_error: bool
     structured_content: Any | None = None
+
+
+class PersistentMCPClient:
+    """可重复调用同一个 stdio Server 的持久化 MCP Client。"""
+
+    def __init__(self, command: str, args: list[str] | None = None) -> None:
+        # 保存 Server 的启动方式；这里只记录配置，还不会启动子进程。
+        self.command = command
+        self.args = args or []
+        self._client: Client | None = None
+        self._exit_stack: AsyncExitStack | None = None
+
+    async def __aenter__(self) -> PersistentMCPClient:  # noqa: PYI034 - 保持 Python 3.10 兼容
+        """进入 async with 时建立连接。"""
+
+        await self.connect()
+        return self
+
+    async def __aexit__(self, exc_type, exc, traceback) -> None:
+        """离开 async with 时关闭连接，即使代码块中发生异常。"""
+
+        await self.close()
+
+    async def connect(self) -> None:
+        """启动 stdio Server，并保存可重复使用的 MCP 连接。"""
+
+        # 已经连接时直接返回，避免重复启动同一个 Server。
+        if self._client is not None:
+            return
+
+        server = StdioServerParameters(command=self.command, args=self.args)
+        transport = stdio_client(server)
+
+        # ExitStack 保存 Client 的退出逻辑，等 close() 时再统一执行。
+        exit_stack = AsyncExitStack()
+        await exit_stack.__aenter__()
+        try:
+            client = await exit_stack.enter_async_context(Client(transport))
+        except BaseException:
+            # 如果启动或握手失败，也要清理已经打开的部分资源。
+            await exit_stack.aclose()
+            raise
+
+        self._exit_stack = exit_stack
+        self._client = client
+
+    async def close(self) -> None:
+        """关闭 MCP 连接和 stdio Server，并清空连接状态。"""
+
+        exit_stack = self._exit_stack
+        if exit_stack is None: # 没有连接时直接返回，避免重复关闭。
+            return
+
+        try:
+            # 按登记顺序的反方向关闭 Client、stdio 和 Server 子进程。
+            await exit_stack.aclose()
+        finally:
+            # 即使关闭过程中发生异常，也不能继续把旧连接当成可用连接。
+            self._client = None
+            self._exit_stack = None
+
+    async def list_tools(self) -> list[DiscoveredTool]:
+        """通过当前连接发现工具，不重复启动 stdio Server。"""
+
+        if self._client is None:
+            raise RuntimeError("MCP Client 尚未连接，请先调用 connect()")
+
+        response = await self._client.list_tools()
+        return [
+            DiscoveredTool(
+                name=tool.name,
+                description=tool.description or "",
+                input_schema=dict(tool.input_schema),
+            )
+            for tool in response.tools
+        ]
+
+    async def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+    ) -> MCPToolCallResult:
+        """通过当前连接调用工具，不重复启动 stdio Server。"""
+
+        if self._client is None:
+            raise RuntimeError("MCP Client 尚未连接，请先调用 connect()")
+
+        response = await self._client.call_tool(name=name, arguments=arguments or {})
+        return MCPToolCallResult(
+            text=_content_to_text(response.content),
+            is_error=response.is_error,
+            structured_content=response.structured_content,
+        )
 
 
 def _content_to_text(content: list[Any]) -> str:
