@@ -6,7 +6,7 @@ from corecoder.eval_cli import _coding_tools, main
 def test_eval_cli_lists_cases_without_calling_model(capsys):
     assert main([]) == 0
     output = capsys.readouterr().out
-    assert "已加载 15 个评测案例" in output
+    assert "已加载 16 个评测案例" in output
     assert "calculator-sign" in output
     assert "本次不调用付费模型" in output
 

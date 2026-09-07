@@ -69,11 +69,11 @@ def _calculator_agent_with_search(case, workspace: Path) -> Agent:
     return agent
 
 
-def test_dataset_contains_fifteen_valid_cases_with_initially_failing_acceptance_tests():
+def test_dataset_contains_sixteen_valid_cases_with_initially_failing_acceptance_tests():
     cases = discover_cases(CASES_ROOT)
 
-    assert len(cases) == 15
-    assert len({case.case_id for case in cases}) == 15
+    assert len(cases) == 16
+    assert len({case.case_id for case in cases}) == 16
     for case in cases:
         environment = {**os.environ, "PYTHONPATH": str(case.workspace_dir)}
         command = [

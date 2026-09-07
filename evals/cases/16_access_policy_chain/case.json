@@ -1,0 +1,14 @@
+{
+  "id": "access-policy-call-chain",
+  "task": "gateway.py 的资源访问判断存在缺陷。请沿调用链定位权限策略根因：管理员可访问全部资源，普通用户只能访问属于自己的资源。只修改必要实现并运行测试。",
+  "workspace": "workspace",
+  "allowed_changed_files": ["access_policy.py"],
+  "relevant_context_files": ["gateway.py", "access_policy.py", "models.py", "test_gateway.py"],
+  "max_tool_calls": 18,
+  "max_fix_attempts": 3,
+  "tags": ["multi-file", "authorization", "call-chain", "enterprise"],
+  "verification": {
+    "command": ["{python}", "-B", "-m", "pytest", "{case_dir}/hidden_tests/test_acceptance.py", "-q"],
+    "timeout": 20
+  }
+}

@@ -126,6 +126,11 @@ class RepositoryIndex:
             if query.strip().lower() in document.text.lower():
                 score += 5
                 reasons_by_document[index].append("完整短语命中")
+            if document.path.name.lower().startswith(("test_", "tests.")):
+                # 测试是重要上下文，但定位根因时生产实现通常应略优先。
+                # 只做轻量折扣，不过滤测试文件。
+                score *= 0.85
+                reasons_by_document[index].append("测试文件轻量降权")
             scores[index] = score
 
         # 高相关文件显式导入的模块通常属于同一调用链。只传播一跳，避免
@@ -136,7 +141,9 @@ class RepositoryIndex:
                     if target_index == source_index:
                         continue
                     candidates.add(target_index)
-                    scores[target_index] = scores.get(target_index, 0.0) + source_score * 0.45
+                    # 直接依赖通常比名称相似的旁路模块更接近真实调用链。
+                    # 系数通过带干扰文件的基准校准，仍保留词法分作为主体。
+                    scores[target_index] = scores.get(target_index, 0.0) + source_score * 0.50
                     reasons_by_document[target_index].append(
                         f"依赖链:{self.documents[source_index].relative_path}"
                     )

@@ -80,3 +80,16 @@ def test_repository_search_expands_one_hop_along_import_graph(tmp_path) -> None:
     pricing = next(hit for hit in hits if hit.path == "pricing.py")
 
     assert any(reason.startswith("依赖链:checkout.py") for reason in pricing.reasons)
+
+
+def test_repository_search_keeps_tests_but_prioritizes_direct_implementation(tmp_path) -> None:
+    (tmp_path / "gateway.py").write_text(
+        "from access_policy import can_access\n\ndef authorize(): return can_access()\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "access_policy.py").write_text("def can_access(): return False\n", encoding="utf-8")
+    (tmp_path / "test_gateway.py").write_text("from gateway import authorize\n", encoding="utf-8")
+
+    ranked = [hit.path for hit in RepositoryIndex.build(tmp_path).search("gateway authorize", limit=3)]
+
+    assert ranked == ["gateway.py", "access_policy.py", "test_gateway.py"]

@@ -13,8 +13,12 @@ def test_retrieval_benchmark_measures_labeled_cross_file_cases() -> None:
 
     results, summary = run_retrieval_benchmark(cases)
 
-    assert [result.case_id for result in results] == ["discount-call-chain", "pagination-empty-page"]
-    assert summary.cases == 2
+    assert [result.case_id for result in results] == [
+        "discount-call-chain",
+        "pagination-empty-page",
+        "access-policy-call-chain",
+    ]
+    assert summary.cases == 3
     assert 0 <= summary.average_context_recall_at_1 <= summary.average_context_recall_at_3
     assert summary.average_context_recall_at_3 <= summary.average_context_recall_at_5 <= 1
     assert summary.mean_reciprocal_rank > 0
@@ -26,7 +30,7 @@ def test_retrieval_benchmark_writes_machine_and_human_reports(tmp_path) -> None:
 
     json_path, markdown_path = write_retrieval_benchmark_report(results, summary, tmp_path)
 
-    assert json.loads(json_path.read_text(encoding="utf-8"))["summary"]["cases"] == 2
+    assert json.loads(json_path.read_text(encoding="utf-8"))["summary"]["cases"] == 3
     markdown = markdown_path.read_text(encoding="utf-8")
     assert "Context recall @1/@3/@5" in markdown
     assert "pagination-empty-page" in markdown
