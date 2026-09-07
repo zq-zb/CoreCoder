@@ -1,19 +1,20 @@
 """供第一阶段学习使用的最小 stdio MCP Server。"""
 
 from mcp.server import MCPServer
+from mcp.types import ToolAnnotations
 
 # 创建 Server 对象
 mcp = MCPServer("corecoder-demo")
 
 # MCP 工具 注册工具
-@mcp.tool()  # 加入到清单
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=True, idempotent_hint=True))  # 加入到清单
 def add(a: int, b: int) -> int:
     """把两个整数相加。"""
 
     return a + b
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=True, idempotent_hint=True))
 def greet(name: str) -> str:
     """根据名字生成一句中文问候语。"""
 

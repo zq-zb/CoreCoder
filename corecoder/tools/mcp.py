@@ -1,9 +1,12 @@
 """把 MCP 工具定义适配成 CoreCoder 能识别的 Tool。"""
 
+import logging
 from typing import Protocol
 
 from corecoder.mcp_client import DiscoveredTool, MCPToolCallResult
 from corecoder.tools.base import Tool
+
+logger = logging.getLogger(__name__)
 
 
 class MCPToolCaller(Protocol):
@@ -23,16 +26,25 @@ class MCPToolDiscovery(MCPToolCaller, Protocol):
 class MCPToolAdapter(Tool):
     """将 MCP 的名称、描述和输入 Schema 转换成 CoreCoder Tool。"""
 
-    def __init__(self, discovered_tool: DiscoveredTool, runtime: MCPToolCaller) -> None:
-        self.name = discovered_tool.name
+    def __init__(
+        self,
+        discovered_tool: DiscoveredTool,
+        runtime: MCPToolCaller,
+        public_name: str | None = None,
+    ) -> None:
+        self.name = public_name or discovered_tool.name
+        self._remote_name = discovered_tool.name
         self.description = discovered_tool.description
         self.parameters = discovered_tool.input_schema
+        self.retry_safe = discovered_tool.retry_safe
         self._runtime = runtime
 
     def execute(self, **kwargs) -> str:
         """把 Agent 的同步工具调用转交给 MCP Runtime。"""
 
-        result = self._runtime.call_tool(self.name, kwargs)
+        logger.info("[Adapter] 收到工具调用：name=%s, arguments=%s", self.name, kwargs)
+        result = self._runtime.call_tool(self._remote_name, kwargs)
+        logger.info("[Adapter] 收到 Runtime 返回结果：%s", result.text)
         return result.text
 
 

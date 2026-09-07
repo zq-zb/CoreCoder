@@ -1,5 +1,6 @@
 """运行 Adapter → Runtime → MCP Client → Server 的完整真实调用。"""
 
+import logging
 import sys
 from pathlib import Path
 
@@ -10,6 +11,9 @@ from corecoder.tools.mcp import MCPToolAdapter
 
 def main() -> None:
     """通过 CoreCoder Tool 接口调用 MCP Server 的 add 工具。"""
+
+    # 演示程序主动打开 INFO 日志；库代码默认不会向用户终端输出这些日志。
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     server_path = Path(__file__).with_name("mcp_demo_server.py")
     runtime = MCPRuntime()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import sys
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
@@ -12,6 +13,8 @@ from typing import Any
 from mcp import Client, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import TextContent
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -24,6 +27,16 @@ class DiscoveredTool:
     name: str
     description: str
     input_schema: dict
+    read_only_hint: bool | None = None
+    destructive_hint: bool | None = None
+    idempotent_hint: bool | None = None
+    open_world_hint: bool | None = None
+
+    @property
+    def retry_safe(self) -> bool:
+        """只有 Server 明确声明只读或幂等，且未声明破坏性时才允许自动重试。"""
+
+        return self.destructive_hint is not True and (self.read_only_hint is True or self.idempotent_hint is True)
 
 
 @dataclass(frozen=True)
@@ -38,6 +51,22 @@ class MCPToolCallResult:
     text: str
     is_error: bool
     structured_content: Any | None = None
+
+
+class MCPToolExecutionError(RuntimeError):
+    """MCP Server 已响应，但工具明确报告执行失败。"""
+
+    def __init__(self, tool_name: str, message: str, structured_content: Any | None = None) -> None:
+        self.tool_name = tool_name
+        self.message = message
+        self.structured_content = structured_content
+        super().__init__(f"MCP 工具 {tool_name!r} 执行失败：{message}")
+
+    @property
+    def retryable(self) -> bool:
+        """只有 Server 通过结构化结果明确声明时才视为瞬时错误。"""
+
+        return isinstance(self.structured_content, dict) and self.structured_content.get("retryable") is True
 
 
 class PersistentMCPClient:
@@ -70,6 +99,7 @@ class PersistentMCPClient:
 
         server = StdioServerParameters(command=self.command, args=self.args)
         transport = stdio_client(server)
+        logger.info("[PersistentClient] 通过 MCP SDK 启动 stdio Server 并建立连接")
 
         # ExitStack 保存 Client 的退出逻辑，等 close() 时再统一执行。
         exit_stack = AsyncExitStack()
@@ -83,6 +113,7 @@ class PersistentMCPClient:
 
         self._exit_stack = exit_stack
         self._client = client
+        logger.info("[PersistentClient] MCP SDK Client 已连接并完成握手")
 
     async def close(self) -> None:
         """关闭 MCP 连接和 stdio Server，并清空连接状态。"""
@@ -93,6 +124,7 @@ class PersistentMCPClient:
 
         try:
             # 按登记顺序的反方向关闭 Client、stdio 和 Server 子进程。
+            logger.info("[PersistentClient] 正在关闭 SDK Client 和 Server 子进程")
             await exit_stack.aclose()
         finally:
             # 即使关闭过程中发生异常，也不能继续把旧连接当成可用连接。
@@ -106,14 +138,21 @@ class PersistentMCPClient:
             raise RuntimeError("MCP Client 尚未连接，请先调用 connect()")
 
         response = await self._client.list_tools()
-        return [
-            DiscoveredTool(
-                name=tool.name,
-                description=tool.description or "",
-                input_schema=dict(tool.input_schema),
+        discovered: list[DiscoveredTool] = []
+        for tool in response.tools:
+            annotations = tool.annotations
+            discovered.append(
+                DiscoveredTool(
+                    name=tool.name,
+                    description=tool.description or "",
+                    input_schema=dict(tool.input_schema),
+                    read_only_hint=annotations.read_only_hint if annotations else None,
+                    destructive_hint=annotations.destructive_hint if annotations else None,
+                    idempotent_hint=annotations.idempotent_hint if annotations else None,
+                    open_world_hint=annotations.open_world_hint if annotations else None,
+                )
             )
-            for tool in response.tools
-        ]
+        return discovered
 
     async def call_tool(
         self,
@@ -125,12 +164,17 @@ class PersistentMCPClient:
         if self._client is None:
             raise RuntimeError("MCP Client 尚未连接，请先调用 connect()")
 
+        logger.info("[PersistentClient] 调用 SDK Client.call_tool：name=%s", name)
         response = await self._client.call_tool(name=name, arguments=arguments or {})
-        return MCPToolCallResult(
+        result = MCPToolCallResult(
             text=_content_to_text(response.content),
             is_error=response.is_error,
             structured_content=response.structured_content,
         )
+        logger.info("[PersistentClient] SDK 返回结果：text=%s, is_error=%s", result.text, result.is_error)
+        if result.is_error:
+            raise MCPToolExecutionError(name, result.text, result.structured_content)
+        return result
 
 
 def _content_to_text(content: list[Any]) -> str:
