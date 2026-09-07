@@ -5,12 +5,13 @@ import os
 import subprocess
 import sys
 from dataclasses import replace
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from corecoder.agent import Agent
 from corecoder.evaluation import (
     CodingAgentEvaluator,
     EvaluationFailure,
+    _sanitize_report_text,
     build_evaluation_metadata,
     discover_cases,
     summarize_results,
@@ -116,6 +117,16 @@ def test_evaluator_independently_verifies_success_and_collects_metrics():
     assert result.repository_incremental_refreshes == 0
     assert result.retrieval_policy_rejections == 0
     assert result.repository_target_recall is None
+
+
+def test_report_path_sanitization_is_case_insensitive_for_windows_paths():
+    workspace = PureWindowsPath("C:/Users/Runner/AppData/Temp/task/workspace")
+    run_root = PureWindowsPath("C:/Users/Runner/AppData/Temp/task")
+    event = r"Edited c:\users\runner\appdata\temp\task\workspace\service.py"
+
+    sanitized = _sanitize_report_text(event, workspace, run_root)
+
+    assert sanitized == r"Edited <workspace>\service.py"
 
 
 def test_evaluator_collects_repository_retrieval_quality_and_cost_metrics():

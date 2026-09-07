@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -673,7 +674,9 @@ def _sanitize_report_text(value: str | None, workspace: Path, run_root: Path) ->
     for path, marker in ((workspace, "<workspace>"), (run_root, "<run_root>")):
         variants = {str(path), path.as_posix()}
         for variant in variants:
-            sanitized = sanitized.replace(variant, marker)
+            # Windows 文件系统和路径 API 可能返回盘符或目录名大小写不同的
+            # 等价路径；报告脱敏必须遵循平台的大小写不敏感语义。
+            sanitized = re.sub(re.escape(variant), marker, sanitized, flags=re.IGNORECASE)
     return sanitized
 
 
