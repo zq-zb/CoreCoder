@@ -1,0 +1,64 @@
+{
+  "summary": {
+    "repetitions": 3,
+    "all_passed": true,
+    "median_processing_throughput": 84.27,
+    "min_processing_throughput": 82.26,
+    "max_processing_throughput": 175.25,
+    "median_claim_p95_ms": 132.861,
+    "worst_claim_p95_ms": 134.53
+  },
+  "runs": [
+    {
+      "created_at_utc": "2026-09-07T03:17:18.458720+00:00",
+      "platform": "Windows-10-10.0.26200-SP0",
+      "python_version": "3.11.5",
+      "sqlite_version": "3.42.0",
+      "task_count": 200,
+      "worker_count": 8,
+      "completed_tasks": 200,
+      "duplicate_claims": 0,
+      "idempotency_unique_tasks": 1,
+      "enqueue_throughput_per_second": 347.87,
+      "processing_throughput_per_second": 175.25,
+      "claim_latency_p50_ms": 1.94,
+      "claim_latency_p95_ms": 21.906,
+      "total_duration_seconds": 3.993,
+      "passed": true
+    },
+    {
+      "created_at_utc": "2026-09-07T03:17:24.347732+00:00",
+      "platform": "Windows-10-10.0.26200-SP0",
+      "python_version": "3.11.5",
+      "sqlite_version": "3.42.0",
+      "task_count": 200,
+      "worker_count": 8,
+      "completed_tasks": 200,
+      "duplicate_claims": 0,
+      "idempotency_unique_tasks": 1,
+      "enqueue_throughput_per_second": 159.66,
+      "processing_throughput_per_second": 84.27,
+      "claim_latency_p50_ms": 11.238,
+      "claim_latency_p95_ms": 132.861,
+      "total_duration_seconds": 5.784,
+      "passed": true
+    },
+    {
+      "created_at_utc": "2026-09-07T03:17:30.206965+00:00",
+      "platform": "Windows-10-10.0.26200-SP0",
+      "python_version": "3.11.5",
+      "sqlite_version": "3.42.0",
+      "task_count": 200,
+      "worker_count": 8,
+      "completed_tasks": 200,
+      "duplicate_claims": 0,
+      "idempotency_unique_tasks": 1,
+      "enqueue_throughput_per_second": 153.29,
+      "processing_throughput_per_second": 82.26,
+      "claim_latency_p50_ms": 12.512,
+      "claim_latency_p95_ms": 134.53,
+      "total_duration_seconds": 5.807,
+      "passed": true
+    }
+  ]
+}

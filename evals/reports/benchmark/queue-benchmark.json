@@ -1,0 +1,17 @@
+{
+  "created_at_utc": "2026-09-07T03:15:54.572997+00:00",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "python_version": "3.11.5",
+  "sqlite_version": "3.42.0",
+  "task_count": 200,
+  "worker_count": 8,
+  "completed_tasks": 200,
+  "duplicate_claims": 0,
+  "idempotency_unique_tasks": 1,
+  "enqueue_throughput_per_second": 389.96,
+  "processing_throughput_per_second": 192.68,
+  "claim_latency_p50_ms": 2.289,
+  "claim_latency_p95_ms": 22.135,
+  "total_duration_seconds": 3.289,
+  "passed": true
+}

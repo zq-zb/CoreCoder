@@ -1,0 +1,65 @@
+{
+  "created_at_utc": "2026-09-07T04:09:04.919990+00:00",
+  "total_scenarios": 5,
+  "passed_scenarios": 5,
+  "pass_rate": 1.0,
+  "total_duration_ms": 277.14,
+  "scenarios": [
+    {
+      "name": "worker_loss_requeue",
+      "passed": true,
+      "expected": "pending",
+      "actual": "pending",
+      "recovery_ms": 37.142,
+      "evidence": {
+        "recovered_tasks": 1,
+        "attempts": 1
+      }
+    },
+    {
+      "name": "retry_exhaustion",
+      "passed": true,
+      "expected": "failed",
+      "actual": "failed",
+      "recovery_ms": 35.314,
+      "evidence": {
+        "attempts": 1,
+        "last_error": "Worker 租约过期且达到最大尝试次数"
+      }
+    },
+    {
+      "name": "cancel_during_worker_loss",
+      "passed": true,
+      "expected": "cancelled",
+      "actual": "cancelled",
+      "recovery_ms": 43.395,
+      "evidence": {
+        "intermediate_status": "cancel_requested"
+      }
+    },
+    {
+      "name": "idempotency_storm",
+      "passed": true,
+      "expected": "1",
+      "actual": "1",
+      "recovery_ms": 160.848,
+      "evidence": {
+        "submissions": 64,
+        "unique_task_ids": 1,
+        "stored_tasks": 1
+      }
+    },
+    {
+      "name": "approval_replay",
+      "passed": true,
+      "expected": "rejected",
+      "actual": "rejected",
+      "recovery_ms": 0.216,
+      "evidence": {
+        "first_status": "consumed",
+        "second_allowed": false,
+        "final_status": "consumed"
+      }
+    }
+  ]
+}
