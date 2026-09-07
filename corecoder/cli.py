@@ -3,6 +3,8 @@
 import argparse
 import os
 import sys
+import uuid
+from pathlib import Path
 
 from prompt_toolkit import prompt as pt_prompt
 from prompt_toolkit.history import FileHistory
@@ -13,9 +15,14 @@ from rich.panel import Panel
 
 from . import __version__
 from .agent import Agent
+from .audit import AuditLogger
 from .config import Config
+from .execution import DockerSandboxExecutor
 from .llm import LLM, LiteLLM
+from .security import ApprovalManager, CommandPolicy, PolicyGuardedBashTool
 from .session import list_sessions, load_session, save_session
+from .tools import ALL_TOOLS
+from .tools.bash import BashTool
 
 console = Console()
 
@@ -32,6 +39,12 @@ def _parse_args():
     p.add_argument("--demo", action="store_true", help="Run the offline scripted demo (no API key needed)")
     p.add_argument("-r", "--resume", metavar="ID", help="Resume a saved session")
     p.add_argument("-v", "--version", action="version", version=f"%(prog)s {__version__}")
+    p.add_argument(
+        "--sandbox",
+        choices=("local", "docker"),
+        default="local",
+        help="Command execution backend (default: local)",
+    )
     return p.parse_args()
 
 
@@ -81,7 +94,20 @@ def main():
         temperature=config.temperature,
         max_tokens=config.max_tokens,
     )
-    agent = Agent(llm=llm, max_context_tokens=config.max_context_tokens)
+    runtime_dir = Path(".corecoder")
+    approvals = ApprovalManager(snapshot_path=runtime_dir / "approvals.json")
+    secured_tools = []
+    for tool in ALL_TOOLS:
+        if tool.name == "bash":
+            raw_bash = BashTool(executor=DockerSandboxExecutor()) if args.sandbox == "docker" else tool
+            tool = PolicyGuardedBashTool(raw_bash, CommandPolicy(), approval_manager=approvals)
+        secured_tools.append(tool)
+    agent = Agent(
+        llm=llm,
+        tools=secured_tools,
+        max_context_tokens=config.max_context_tokens,
+        audit_logger=AuditLogger(runtime_dir / "audit.jsonl", task_id=uuid.uuid4().hex),
+    )
 
     # resume saved session
     if args.resume:
@@ -103,7 +129,7 @@ def main():
         return
 
     # interactive REPL
-    _repl(agent, config)
+    _repl(agent, config, approvals)
 
 
 # 一次性模式：能被脚本调用
@@ -127,7 +153,7 @@ def _run_once(agent: Agent, prompt: str):
     print()
 
 
-def _repl(agent: Agent, config: Config):
+def _repl(agent: Agent, config: Config, approvals: ApprovalManager):
     """Interactive read-eval-print loop."""
     console.print(
         Panel(
@@ -232,6 +258,27 @@ def _repl(agent: Agent, config: Config):
                 for s in sessions:
                     console.print(f"  [cyan]{s['id']}[/cyan] ({s['model']}, {s['saved_at']}) {s['preview']}")
             continue
+        if user_input == "/approvals":
+            requests = approvals.list_requests()
+            if not requests:
+                console.print("[dim]没有审批请求。[/dim]")
+            for request in requests:
+                console.print(
+                    f"[cyan]{request.request_id}[/cyan]  {request.status.value}  "
+                    f"{request.command_preview}"
+                )
+            continue
+        if user_input.startswith("/approve "):
+            parts = user_input.split(maxsplit=2)
+            if len(parts) < 3:
+                console.print("[yellow]用法：/approve <request_id> <approver>[/yellow]")
+                continue
+            try:
+                approved = approvals.approve(parts[1], parts[2])
+                console.print(f"[green]审批完成：{approved.request_id}[/green]")
+            except (KeyError, ValueError) as error:
+                console.print(f"[red]审批失败：{error}[/red]")
+            continue
         # 不在名单上的输入，提示没这个命令
         # an unknown /command shouldn't be sent to the model as a prompt
         if user_input.startswith("/"):
@@ -276,6 +323,8 @@ def _show_help():  # 能力暴露开关
             "  /diff          Show files modified this session\n"
             "  /save          Save session to disk\n"
             "  /sessions      List saved sessions\n"
+            "  /approvals     List command approval requests\n"
+            "  /approve <id> <approver>  Approve one exact command\n"
             "  quit           Exit CoreCoder\n"
             "\n"
             "[bold]Input:[/bold]\n"

@@ -11,6 +11,8 @@ import os
 import re
 import subprocess
 import threading
+from pathlib import Path
+from typing import Protocol
 
 from .base import Tool
 
@@ -18,6 +20,10 @@ from .base import Tool
 # when the agent executes tools in parallel two bash calls never race on one
 # shared global: each worker thread carries its own cwd. See article 05.
 _local = threading.local()
+
+
+class CommandExecutor(Protocol):
+    def execute(self, command: str, *, timeout: int, cwd: str | Path) -> str: ...
 
 # patterns that could wreck the filesystem or leak secrets
 # 危险命令模式，可能破坏文件系统或泄露敏感信息
@@ -59,6 +65,9 @@ class BashTool(Tool):
         "required": ["command"],
     }
 
+    def __init__(self, executor: CommandExecutor | None = None) -> None:
+        self.executor = executor
+
     def execute(self, command: str, timeout: int = 120) -> str:
         # safety check 安全检查，拦截危险命令
         warning = _check_dangerous(command)
@@ -67,6 +76,9 @@ class BashTool(Tool):
 
         # use this thread's own tracked working directory
         cwd = getattr(_local, "cwd", None) or os.getcwd()
+
+        if self.executor is not None:
+            return self.executor.execute(command, timeout=timeout, cwd=cwd)
 
         try:
             proc = subprocess.run(

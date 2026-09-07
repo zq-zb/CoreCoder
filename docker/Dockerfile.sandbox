@@ -1,0 +1,9 @@
+FROM python:3.11-slim
+
+# 固定测试依赖版本，减少不同时间构建导致的行为漂移。
+RUN pip install --no-cache-dir pytest==8.3.5
+
+# 使用非 root 用户；工作区由运行时挂载到 /workspace。
+RUN useradd --create-home --uid 10001 corecoder
+USER corecoder
+WORKDIR /workspace
