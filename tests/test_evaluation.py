@@ -56,6 +56,18 @@ def _calculator_agent(case, workspace: Path, *, write_extra: bool = False) -> Ag
     )
 
 
+def _calculator_agent_with_search(case, workspace: Path) -> Agent:
+    agent = _calculator_agent(case, workspace)
+    agent.llm._turns.insert(0, LLMResponse(tool_calls=[ToolCall(
+        "search",
+        "repository_search",
+        {"query": "calculator add", "path": str(workspace)},
+    )]))
+    agent.tools.insert(0, get_tool("repository_search"))
+    agent._tool_by_name = {tool.name: tool for tool in agent.tools}
+    return agent
+
+
 def test_dataset_contains_fifteen_valid_cases_with_initially_failing_acceptance_tests():
     cases = discover_cases(CASES_ROOT)
 
@@ -95,6 +107,25 @@ def test_evaluator_independently_verifies_success_and_collects_metrics():
     assert result.duration_seconds > 0
     assert result.context_compressions == 0
     assert result.context_tokens_saved == 0
+    assert result.repository_search_calls == 0
+    assert result.repository_target_recall is None
+
+
+def test_evaluator_collects_repository_retrieval_quality_and_cost_metrics():
+    case = discover_cases(CASES_ROOT)[0]
+    evaluator = CodingAgentEvaluator(_calculator_agent_with_search)
+
+    result = evaluator.run_case(case)
+    summary = summarize_results([result])
+
+    assert result.success is True
+    assert result.repository_search_calls == 1
+    assert result.repository_search_results >= 1
+    assert result.repository_context_characters > 0
+    assert result.repository_search_duration_seconds > 0
+    assert result.repository_target_recall == 1.0
+    assert summary.total_repository_search_calls == 1
+    assert summary.average_repository_target_recall == 1.0
 
 
 def test_stability_summary_distinguishes_flaky_case():

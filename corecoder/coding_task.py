@@ -76,6 +76,7 @@ _PATH_ARGUMENTS = {
     "edit_file": "file_path",
     "glob": "path",
     "grep": "path",
+    "repository_search": "path",
 }
 
 

@@ -45,6 +45,12 @@ def test_repository_search_tool_returns_bounded_explainable_context(tmp_path) ->
     assert "auth.py:1" in result
     assert "符号命中:verify_webhook_signature" in result
     assert len(result) <= 15_030
+    stats = tool.stats()
+    assert stats.calls == 1
+    assert stats.returned_results == 1
+    assert stats.context_characters == len(result)
+    assert stats.duration_seconds > 0
+    assert stats.returned_paths == ("auth.py",)
 
 
 def test_repository_search_handles_empty_and_missing_inputs(tmp_path) -> None:
