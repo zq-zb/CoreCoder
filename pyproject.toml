@@ -51,6 +51,7 @@ corecoder-task = "corecoder.task_cli:main"
 corecoder-benchmark = "corecoder.benchmark:main"
 corecoder-resilience = "corecoder.resilience:main"
 corecoder-metrics = "corecoder.metrics:main"
+corecoder-retrieval-benchmark = "corecoder.retrieval_benchmark:main"
 
 [project.urls]
 Homepage = "https://github.com/he-yufeng/CoreCoder"
