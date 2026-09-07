@@ -109,6 +109,8 @@ def test_evaluator_independently_verifies_success_and_collects_metrics():
     assert result.context_compressions == 0
     assert result.context_tokens_saved == 0
     assert result.repository_search_calls == 0
+    assert result.repository_cache_hits == 0
+    assert result.repository_index_builds == 0
     assert result.repository_target_recall is None
 
 
@@ -127,9 +129,16 @@ def test_evaluator_collects_repository_retrieval_quality_and_cost_metrics():
     assert result.repository_search_results >= 1
     assert result.repository_context_characters > 0
     assert result.repository_search_duration_seconds > 0
+    assert result.repository_cache_hits == 0
+    assert result.repository_index_builds == 1
+    assert result.repository_cache_invalidations == 0
     assert result.repository_target_recall == 1.0
     assert result.repository_context_recall == 1.0
     assert summary.total_repository_search_calls == 1
+    assert summary.total_repository_cache_hits == 0
+    assert summary.total_repository_index_builds == 1
+    assert summary.total_repository_cache_invalidations == 0
+    assert summary.repository_cache_hit_rate == 0.0
     assert summary.average_repository_target_recall == 1.0
     assert summary.average_repository_context_recall == 1.0
 
@@ -145,6 +154,23 @@ def test_stability_summary_distinguishes_flaky_case():
     assert stability[0].runs == 2
     assert stability[0].passes == 1
     assert stability[0].pass_rate == 0.5
+
+
+def test_summary_calculates_repository_cache_hit_rate():
+    case = discover_cases(CASES_ROOT)[0]
+    result = CodingAgentEvaluator(lambda selected, workspace: _calculator_agent(selected, workspace)).run_case(case)
+    cached = replace(
+        result,
+        repository_search_calls=3,
+        repository_cache_hits=2,
+        repository_index_builds=1,
+        repository_cache_invalidations=0,
+    )
+
+    summary = summarize_results([cached])
+
+    assert summary.repository_cache_hit_rate == 2 / 3
+    assert summary.total_repository_index_builds == 1
 
 
 def test_evaluator_detects_unexpected_file_from_filesystem_diff():
@@ -173,6 +199,8 @@ def test_evaluation_report_contains_json_and_markdown_summary(tmp_path):
     assert payload["results"][0]["case_id"] == "calculator-sign"
     markdown = markdown_path.read_text(encoding="utf-8")
     assert "Success rate: 100.0%" in markdown
+    assert "Repository cache hit rate: n/a" in markdown
+    assert "Cache H/B/I" in markdown
     assert "calculator-sign" in markdown
 
 

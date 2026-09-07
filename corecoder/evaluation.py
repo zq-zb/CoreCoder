@@ -136,6 +136,9 @@ class EvaluationResult:
     repository_search_results: int
     repository_context_characters: int
     repository_search_duration_seconds: float
+    repository_cache_hits: int
+    repository_index_builds: int
+    repository_cache_invalidations: int
     repository_target_recall: float | None
     repository_context_recall: float | None
     verification: VerificationResult
@@ -163,6 +166,10 @@ class EvaluationSummary:
     average_repository_search_results: float
     total_repository_context_characters: int
     average_repository_search_duration_seconds: float
+    total_repository_cache_hits: int
+    total_repository_index_builds: int
+    total_repository_cache_invalidations: int
+    repository_cache_hit_rate: float | None
     average_repository_target_recall: float | None
     average_repository_context_recall: float | None
 
@@ -175,6 +182,21 @@ class CaseStability:
     runs: int
     passes: int
     pass_rate: float
+
+
+@dataclass(frozen=True)
+class RepositoryEvaluationMetrics:
+    """单次评测中的仓库检索质量、成本与缓存行为。"""
+
+    calls: int = 0
+    results: int = 0
+    context_characters: int = 0
+    duration_seconds: float = 0.0
+    cache_hits: int = 0
+    index_builds: int = 0
+    cache_invalidations: int = 0
+    target_recall: float | None = None
+    context_recall: float | None = None
 
 
 @dataclass(frozen=True)
@@ -236,6 +258,9 @@ class CodingAgentEvaluator:
                 repository_search_results=0,
                 repository_context_characters=0,
                 repository_search_duration_seconds=0.0,
+                repository_cache_hits=0,
+                repository_index_builds=0,
+                repository_cache_invalidations=0,
                 repository_target_recall=None,
                 repository_context_recall=None,
                 verification=verification,
@@ -322,12 +347,15 @@ class CodingAgentEvaluator:
             estimated_cost=estimated_cost,
             context_compressions=context_stats.compression_count,
             context_tokens_saved=context_stats.tokens_saved,
-            repository_search_calls=repository_metrics[0],
-            repository_search_results=repository_metrics[1],
-            repository_context_characters=repository_metrics[2],
-            repository_search_duration_seconds=repository_metrics[3],
-            repository_target_recall=repository_metrics[4],
-            repository_context_recall=repository_metrics[5],
+            repository_search_calls=repository_metrics.calls,
+            repository_search_results=repository_metrics.results,
+            repository_context_characters=repository_metrics.context_characters,
+            repository_search_duration_seconds=repository_metrics.duration_seconds,
+            repository_cache_hits=repository_metrics.cache_hits,
+            repository_index_builds=repository_metrics.index_builds,
+            repository_cache_invalidations=repository_metrics.cache_invalidations,
+            repository_target_recall=repository_metrics.target_recall,
+            repository_context_recall=repository_metrics.context_recall,
             verification=verification,
             agent_response=task_report.final_response,
         )
@@ -403,7 +431,10 @@ def summarize_results(results: list[EvaluationResult]) -> EvaluationSummary:
             total_estimated_cost=0.0, total_context_compressions=0, total_context_tokens_saved=0,
             total_repository_search_calls=0, average_repository_search_results=0.0,
             total_repository_context_characters=0,
-            average_repository_search_duration_seconds=0.0, average_repository_target_recall=None,
+            average_repository_search_duration_seconds=0.0,
+            total_repository_cache_hits=0, total_repository_index_builds=0,
+            total_repository_cache_invalidations=0, repository_cache_hit_rate=None,
+            average_repository_target_recall=None,
             average_repository_context_recall=None,
         )
     costs = [result.estimated_cost for result in results]
@@ -427,6 +458,15 @@ def summarize_results(results: list[EvaluationResult]) -> EvaluationSummary:
         total_repository_context_characters=sum(result.repository_context_characters for result in results),
         average_repository_search_duration_seconds=(
             sum(result.repository_search_duration_seconds for result in results) / total
+        ),
+        total_repository_cache_hits=sum(result.repository_cache_hits for result in results),
+        total_repository_index_builds=sum(result.repository_index_builds for result in results),
+        total_repository_cache_invalidations=sum(result.repository_cache_invalidations for result in results),
+        repository_cache_hit_rate=(
+            sum(result.repository_cache_hits for result in results)
+            / sum(result.repository_search_calls for result in results)
+            if sum(result.repository_search_calls for result in results)
+            else None
         ),
         average_repository_target_recall=_average_optional(
             [result.repository_target_recall for result in results]
@@ -499,11 +539,14 @@ def write_evaluation_report(
         f"- Repository search calls: {summary.total_repository_search_calls}",
         f"- Repository context characters: {summary.total_repository_context_characters}",
         f"- Average repository search duration: {summary.average_repository_search_duration_seconds:.4f}s",
+        f"- Repository cache hit rate: {_format_optional_rate(summary.repository_cache_hit_rate)}",
+        f"- Repository index builds: {summary.total_repository_index_builds}",
+        f"- Repository cache invalidations: {summary.total_repository_cache_invalidations}",
         f"- Average repository target recall: {_format_optional_rate(summary.average_repository_target_recall)}",
         f"- Average repository context recall: {_format_optional_rate(summary.average_repository_context_recall)}",
         "",
-        "| Case | Success | Hidden tests | Scope | Tool calls | Repo searches | Target recall | Context recall | Failures | Task reason |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---|---|",
+        "| Case | Success | Hidden tests | Scope | Tool calls | Repo searches | Cache H/B/I | Target recall | Context recall | Failures | Task reason |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|",
     ])
     for result in results:
         failure_text = ", ".join(failure.value for failure in result.failures) or "-"
@@ -511,7 +554,9 @@ def write_evaluation_report(
             f"| {result.case_id} | {'yes' if result.success else 'no'} | "
             f"{'pass' if result.hidden_tests_passed else 'fail'} | "
             f"{'pass' if result.scope_compliant else 'fail'} | {result.tool_calls} | "
-            f"{result.repository_search_calls} | {_format_optional_rate(result.repository_target_recall)} | "
+            f"{result.repository_search_calls} | {result.repository_cache_hits}/"
+            f"{result.repository_index_builds}/{result.repository_cache_invalidations} | "
+            f"{_format_optional_rate(result.repository_target_recall)} | "
             f"{_format_optional_rate(result.repository_context_recall)} | "
             f"{failure_text} | "
             f"{(result.task_failure_reason or '-').replace('|', '/')} |"
@@ -606,7 +651,7 @@ def _repository_metrics(
     agent: Agent,
     target_files: tuple[str, ...],
     context_files: tuple[str, ...],
-) -> tuple[int, int, int, float, float | None, float | None]:
+) -> RepositoryEvaluationMetrics:
     """从可能被工作区守卫包装的检索工具中提取稳定指标。"""
 
     for candidate in agent.tools:
@@ -617,22 +662,25 @@ def _repository_metrics(
             continue
         stats = tool.stats()
         if stats.calls == 0:
-            return 0, 0, 0, 0.0, None, None
+            return RepositoryEvaluationMetrics()
         targets = set(target_files)
         contexts = set(context_files)
         target_recall = len(targets.intersection(stats.returned_paths)) / len(targets) if targets else None
         context_recall = (
             len(contexts.intersection(stats.returned_paths)) / len(contexts) if contexts else None
         )
-        return (
-            stats.calls,
-            stats.returned_results,
-            stats.context_characters,
-            stats.duration_seconds,
-            target_recall,
-            context_recall,
+        return RepositoryEvaluationMetrics(
+            calls=stats.calls,
+            results=stats.returned_results,
+            context_characters=stats.context_characters,
+            duration_seconds=stats.duration_seconds,
+            cache_hits=stats.cache_hits,
+            index_builds=stats.index_builds,
+            cache_invalidations=stats.cache_invalidations,
+            target_recall=target_recall,
+            context_recall=context_recall,
         )
-    return 0, 0, 0, 0.0, None, None
+    return RepositoryEvaluationMetrics()
 
 
 def _average_optional(values: list[float | None]) -> float | None:
