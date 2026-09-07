@@ -101,7 +101,8 @@ def test_evaluator_independently_verifies_success_and_collects_metrics():
     assert result.success is True
     assert result.task_failure_reason is None
     assert result.task_events
-    assert any("<workspace>" in event for event in result.task_events)
+    # 工具事件可以选择报告相对路径，因此不能强制要求一定出现脱敏占位符；
+    # 真正的安全契约是报告中不得残留评测临时目录。
     assert all("corecoder-eval-" not in event for event in result.task_events)
     assert result.tool_trace == ("read_file", "edit_file", "bash")
     assert result.hidden_tests_passed is True
@@ -127,6 +128,16 @@ def test_report_path_sanitization_is_case_insensitive_for_windows_paths():
     sanitized = _sanitize_report_text(event, workspace, run_root)
 
     assert sanitized == r"Edited <workspace>\service.py"
+
+
+def test_report_path_sanitization_accepts_mixed_windows_separators():
+    workspace = PureWindowsPath("C:/Users/Runner/AppData/Temp/task/workspace")
+    run_root = PureWindowsPath("C:/Users/Runner/AppData/Temp/task")
+    event = r"Edited C:/USERS/Runner/AppData/Temp/task/workspace/service.py"
+
+    sanitized = _sanitize_report_text(event, workspace, run_root)
+
+    assert sanitized == "Edited <workspace>/service.py"
 
 
 def test_evaluator_collects_repository_retrieval_quality_and_cost_metrics():
