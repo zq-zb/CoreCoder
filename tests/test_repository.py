@@ -66,3 +66,17 @@ def test_repository_search_returns_no_match_without_dumping_repository(tmp_path)
     result = get_tool("repository_search").execute("nonexistent_symbol", str(tmp_path))
 
     assert result == "No relevant repository context found."
+
+
+def test_repository_search_expands_one_hop_along_import_graph(tmp_path) -> None:
+    (tmp_path / "checkout.py").write_text(
+        "from pricing import apply_discount\n\ndef order_total(): pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "pricing.py").write_text("def apply_discount(): pass\n", encoding="utf-8")
+    (tmp_path / "checkout_legacy.py").write_text("def old_order_total(): pass\n", encoding="utf-8")
+
+    hits = RepositoryIndex.build(tmp_path).search("checkout order total", limit=3)
+    pricing = next(hit for hit in hits if hit.path == "pricing.py")
+
+    assert any(reason.startswith("依赖链:checkout.py") for reason in pricing.reasons)

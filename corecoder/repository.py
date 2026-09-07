@@ -19,6 +19,7 @@ _SYMBOL_PATTERN = re.compile(
     r"^\s*(?:async\s+def|def|class|function|interface|type|struct|func)\s+([A-Za-z_][A-Za-z0-9_]*)",
     re.MULTILINE,
 )
+_IMPORT_PATTERN = re.compile(r"^\s*(?:from|import)\s+([A-Za-z_][A-Za-z0-9_.]*)", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,7 @@ class RepositoryDocument:
     lines: tuple[str, ...]
     terms: Counter[str]
     symbols: frozenset[str]
+    references: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -47,9 +49,11 @@ class RepositoryIndex:
         self.root = Path(root).expanduser().resolve()
         self.documents = tuple(documents)
         self._postings: dict[str, set[int]] = defaultdict(set)
+        self._modules: dict[str, set[int]] = defaultdict(set)
         for index, document in enumerate(self.documents):
             for term in document.terms:
                 self._postings[term].add(index)
+            self._modules[document.path.stem.lower()].add(index)
 
     @classmethod
     def build(
@@ -82,6 +86,9 @@ class RepositoryIndex:
                     lines=tuple(text.splitlines()),
                     terms=Counter(_tokenize(f"{relative.as_posix()} {text}")),
                     symbols=frozenset(symbol.lower() for symbol in _SYMBOL_PATTERN.findall(text)),
+                    references=frozenset(
+                        module.split(".")[-1].lower() for module in _IMPORT_PATTERN.findall(text)
+                    ),
                 )
             )
             if len(documents) >= max_files:
@@ -97,12 +104,12 @@ class RepositoryIndex:
         for term in terms:
             candidates.update(self._postings.get(term, ()))
 
-        hits: list[RepositorySearchHit] = []
+        scores: dict[int, float] = {}
+        reasons_by_document: dict[int, list[str]] = defaultdict(list)
         document_count = max(1, len(self.documents))
         for index in candidates:
             document = self.documents[index]
             score = 0.0
-            reasons: list[str] = []
             path_lower = document.relative_path.lower()
             for term in terms:
                 frequency = document.terms.get(term, 0)
@@ -112,19 +119,37 @@ class RepositoryIndex:
                 score += (1 + math.log(frequency)) * math.log(1 + document_count / document_frequency)
                 if term in path_lower:
                     score += 6
-                    reasons.append(f"路径命中:{term}")
+                    reasons_by_document[index].append(f"路径命中:{term}")
                 if term in document.symbols:
                     score += 8
-                    reasons.append(f"符号命中:{term}")
-
-            line_number, snippet = _best_snippet(document.lines, terms)
+                    reasons_by_document[index].append(f"符号命中:{term}")
             if query.strip().lower() in document.text.lower():
                 score += 5
-                reasons.append("完整短语命中")
+                reasons_by_document[index].append("完整短语命中")
+            scores[index] = score
+
+        # 高相关文件显式导入的模块通常属于同一调用链。只传播一跳，避免
+        # 依赖图扩散把整个仓库重新塞回候选集合。
+        for source_index, source_score in tuple(scores.items()):
+            for reference in self.documents[source_index].references:
+                for target_index in self._modules.get(reference, ()):
+                    if target_index == source_index:
+                        continue
+                    candidates.add(target_index)
+                    scores[target_index] = scores.get(target_index, 0.0) + source_score * 0.45
+                    reasons_by_document[target_index].append(
+                        f"依赖链:{self.documents[source_index].relative_path}"
+                    )
+
+        hits: list[RepositorySearchHit] = []
+        for index in candidates:
+            document = self.documents[index]
+            line_number, snippet = _best_snippet(document.lines, terms)
+            reasons = reasons_by_document[index]
             hits.append(
                 RepositorySearchHit(
                     path=document.relative_path,
-                    score=round(score, 3),
+                    score=round(scores.get(index, 0.0), 3),
                     line=line_number,
                     reasons=tuple(dict.fromkeys(reasons)) or ("内容词频命中",),
                     snippet=snippet,
