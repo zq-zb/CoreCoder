@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
@@ -68,10 +69,7 @@ class RepositoryIndex:
             raise ValueError(f"仓库目录不存在：{root}")
 
         documents: list[RepositoryDocument] = []
-        for path in sorted(base.rglob("*")):
-            relative = path.relative_to(base)
-            if any(part in _SKIP_DIRS for part in relative.parts) or not path.is_file():
-                continue
+        for path, relative in _iter_repository_files(base):
             if path.suffix.lower() not in _TEXT_SUFFIXES or path.stat().st_size > max_file_bytes:
                 continue
             try:
@@ -164,6 +162,48 @@ class RepositoryIndex:
             )
 
         return sorted(hits, key=lambda hit: (-hit.score, hit.path))[:limit]
+
+
+def repository_fingerprint(
+    root: str | Path,
+    *,
+    max_files: int = 5000,
+    max_file_bytes: int = 512_000,
+) -> tuple[tuple[str, int, int], ...]:
+    """生成轻量仓库指纹，用于判断内存索引是否仍然有效。
+
+    指纹只读取文件元数据，不读取正文。与重新分词整个仓库相比，它适合在
+    每次检索前执行；文件路径、大小或修改时间变化都会触发索引重建。
+    """
+
+    base = Path(root).expanduser().resolve()
+    if not base.is_dir():
+        raise ValueError(f"仓库目录不存在：{root}")
+
+    entries: list[tuple[str, int, int]] = []
+    for path, relative in _iter_repository_files(base):
+        if path.suffix.lower() not in _TEXT_SUFFIXES:
+            continue
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        if stat.st_size > max_file_bytes:
+            continue
+        entries.append((relative.as_posix(), stat.st_size, stat.st_mtime_ns))
+        if len(entries) >= max_files:
+            break
+    return tuple(entries)
+
+
+def _iter_repository_files(base: Path):
+    """按稳定顺序遍历文件，并在入口处剪掉依赖和生成目录。"""
+
+    for directory, directory_names, file_names in os.walk(base):
+        directory_names[:] = sorted(name for name in directory_names if name not in _SKIP_DIRS)
+        for name in sorted(file_names):
+            path = Path(directory) / name
+            yield path, path.relative_to(base)
 
 
 def _tokenize(text: str) -> list[str]:

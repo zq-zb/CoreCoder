@@ -51,6 +51,9 @@ def test_repository_search_tool_returns_bounded_explainable_context(tmp_path) ->
     assert stats.context_characters == len(result)
     assert stats.duration_seconds > 0
     assert stats.returned_paths == ("auth.py",)
+    assert stats.cache_hits == 0
+    assert stats.index_builds == 1
+    assert stats.cache_invalidations == 0
 
 
 def test_repository_search_handles_empty_and_missing_inputs(tmp_path) -> None:
@@ -93,3 +96,35 @@ def test_repository_search_keeps_tests_but_prioritizes_direct_implementation(tmp
     ranked = [hit.path for hit in RepositoryIndex.build(tmp_path).search("gateway authorize", limit=3)]
 
     assert ranked == ["gateway.py", "access_policy.py", "test_gateway.py"]
+
+
+def test_repository_search_reuses_unchanged_index(tmp_path) -> None:
+    (tmp_path / "service.py").write_text("def health_check(): return True\n", encoding="utf-8")
+    tool = get_tool("repository_search")
+
+    first = tool.execute("health_check", str(tmp_path))
+    second = tool.execute("health_check", str(tmp_path))
+
+    assert first == second
+    stats = tool.stats()
+    assert stats.calls == 2
+    assert stats.index_builds == 1
+    assert stats.cache_hits == 1
+    assert stats.cache_invalidations == 0
+
+
+def test_repository_search_invalidates_cache_after_file_change(tmp_path) -> None:
+    source = tmp_path / "service.py"
+    source.write_text("def old_health_check(): return False\n", encoding="utf-8")
+    tool = get_tool("repository_search")
+    assert "service.py" in tool.execute("old_health_check", str(tmp_path))
+
+    source.write_text("def new_health_check(): return True\n", encoding="utf-8")
+    result = tool.execute("new_health_check", str(tmp_path))
+
+    assert "service.py" in result
+    assert "new_health_check" in result
+    stats = tool.stats()
+    assert stats.index_builds == 2
+    assert stats.cache_hits == 0
+    assert stats.cache_invalidations == 1

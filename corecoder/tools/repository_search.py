@@ -2,10 +2,11 @@
 
 import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 
-from corecoder.repository import RepositoryIndex
+from corecoder.repository import RepositoryIndex, repository_fingerprint
 
 from .base import Tool
 
@@ -17,6 +18,9 @@ class RepositorySearchStats:
     context_characters: int
     duration_seconds: float
     returned_paths: tuple[str, ...]
+    cache_hits: int
+    index_builds: int
+    cache_invalidations: int
 
 
 class RepositorySearchTool(Tool):
@@ -37,11 +41,41 @@ class RepositorySearchTool(Tool):
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        self._cache_lock = threading.Lock()
         self._calls = 0
         self._returned_results = 0
         self._context_characters = 0
         self._duration_seconds = 0.0
         self._returned_paths: set[str] = set()
+        self._cache_hits = 0
+        self._index_builds = 0
+        self._cache_invalidations = 0
+        # Agent 级小型 LRU：避免不同 Agent 共享工作区状态，同时限制内存占用。
+        self._index_cache: OrderedDict[
+            Path, tuple[tuple[tuple[str, int, int], ...], RepositoryIndex]
+        ] = OrderedDict()
+        self._max_cached_repositories = 4
+
+    def _get_index(self, path: str) -> RepositoryIndex:
+        root = Path(path).expanduser().resolve()
+        # 指纹比较和重建在同一把锁内完成，避免并发查询重复构建索引。
+        with self._cache_lock:
+            fingerprint = repository_fingerprint(root)
+            cached = self._index_cache.get(root)
+            if cached is not None and cached[0] == fingerprint:
+                self._index_cache.move_to_end(root)
+                self._cache_hits += 1
+                return cached[1]
+
+            if cached is not None:
+                self._cache_invalidations += 1
+            index = RepositoryIndex.build(root)
+            self._index_builds += 1
+            self._index_cache[root] = (fingerprint, index)
+            self._index_cache.move_to_end(root)
+            while len(self._index_cache) > self._max_cached_repositories:
+                self._index_cache.popitem(last=False)
+            return index
 
     def execute(self, query: str, path: str = ".", limit: int = 10) -> str:
         started = time.perf_counter()
@@ -51,7 +85,7 @@ class RepositorySearchTool(Tool):
         else:
             limit = max(1, min(limit, 20))
             try:
-                index = RepositoryIndex.build(Path(path))
+                index = self._get_index(path)
             except (OSError, ValueError) as error:
                 result = f"Error: {error}"
             else:
@@ -84,11 +118,15 @@ class RepositorySearchTool(Tool):
         return result
 
     def stats(self) -> RepositorySearchStats:
-        with self._lock:
+        # 同时保护调用统计和缓存统计，避免监控线程读到跨时刻的组合值。
+        with self._cache_lock, self._lock:
             return RepositorySearchStats(
                 calls=self._calls,
                 returned_results=self._returned_results,
                 context_characters=self._context_characters,
                 duration_seconds=self._duration_seconds,
                 returned_paths=tuple(sorted(self._returned_paths)),
+                cache_hits=self._cache_hits,
+                index_builds=self._index_builds,
+                cache_invalidations=self._cache_invalidations,
             )

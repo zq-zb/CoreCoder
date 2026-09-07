@@ -1,0 +1,16 @@
+{
+  "repository": ".",
+  "query": "MCP runtime circuit breaker repository search",
+  "repetitions": 5,
+  "cold_duration_ms": 201.4913000020897,
+  "warm_durations_ms": [
+    68.13910000346368,
+    64.25550000130897,
+    63.58660000114469,
+    62.05179999960819
+  ],
+  "average_warm_duration_ms": 64.50825000138138,
+  "speedup": 3.12349660698864,
+  "cache_hits": 4,
+  "index_builds": 1
+}
