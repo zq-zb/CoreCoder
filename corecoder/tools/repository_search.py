@@ -6,7 +6,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 
-from corecoder.repository import RepositoryIndex, repository_fingerprint
+from corecoder.repository import RepositoryFingerprint, RepositoryIndex, repository_fingerprint
 
 from .base import Tool
 
@@ -21,6 +21,7 @@ class RepositorySearchStats:
     cache_hits: int
     index_builds: int
     cache_invalidations: int
+    incremental_refreshes: int
 
 
 class RepositorySearchTool(Tool):
@@ -50,9 +51,10 @@ class RepositorySearchTool(Tool):
         self._cache_hits = 0
         self._index_builds = 0
         self._cache_invalidations = 0
+        self._incremental_refreshes = 0
         # Agent 级小型 LRU：避免不同 Agent 共享工作区状态，同时限制内存占用。
         self._index_cache: OrderedDict[
-            Path, tuple[tuple[tuple[str, int, int], ...], RepositoryIndex]
+            Path, tuple[RepositoryFingerprint, RepositoryIndex]
         ] = OrderedDict()
         self._max_cached_repositories = 4
 
@@ -69,8 +71,11 @@ class RepositorySearchTool(Tool):
 
             if cached is not None:
                 self._cache_invalidations += 1
-            index = RepositoryIndex.build(root)
-            self._index_builds += 1
+                index = cached[1].refresh(cached[0], fingerprint)
+                self._incremental_refreshes += 1
+            else:
+                index = RepositoryIndex.build(root)
+                self._index_builds += 1
             self._index_cache[root] = (fingerprint, index)
             self._index_cache.move_to_end(root)
             while len(self._index_cache) > self._max_cached_repositories:
@@ -129,4 +134,5 @@ class RepositorySearchTool(Tool):
                 cache_hits=self._cache_hits,
                 index_builds=self._index_builds,
                 cache_invalidations=self._cache_invalidations,
+                incremental_refreshes=self._incremental_refreshes,
             )

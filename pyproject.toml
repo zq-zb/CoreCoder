@@ -53,6 +53,7 @@ corecoder-resilience = "corecoder.resilience:main"
 corecoder-metrics = "corecoder.metrics:main"
 corecoder-retrieval-benchmark = "corecoder.retrieval_benchmark:main"
 corecoder-retrieval-cache-benchmark = "corecoder.retrieval_cache_benchmark:main"
+corecoder-retrieval-scale-benchmark = "corecoder.retrieval_scale_benchmark:main"
 
 [project.urls]
 Homepage = "https://github.com/he-yufeng/CoreCoder"

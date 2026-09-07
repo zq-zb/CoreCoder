@@ -139,6 +139,7 @@ class EvaluationResult:
     repository_cache_hits: int
     repository_index_builds: int
     repository_cache_invalidations: int
+    repository_incremental_refreshes: int
     repository_target_recall: float | None
     repository_context_recall: float | None
     verification: VerificationResult
@@ -169,6 +170,7 @@ class EvaluationSummary:
     total_repository_cache_hits: int
     total_repository_index_builds: int
     total_repository_cache_invalidations: int
+    total_repository_incremental_refreshes: int
     repository_cache_hit_rate: float | None
     average_repository_target_recall: float | None
     average_repository_context_recall: float | None
@@ -195,6 +197,7 @@ class RepositoryEvaluationMetrics:
     cache_hits: int = 0
     index_builds: int = 0
     cache_invalidations: int = 0
+    incremental_refreshes: int = 0
     target_recall: float | None = None
     context_recall: float | None = None
 
@@ -261,6 +264,7 @@ class CodingAgentEvaluator:
                 repository_cache_hits=0,
                 repository_index_builds=0,
                 repository_cache_invalidations=0,
+                repository_incremental_refreshes=0,
                 repository_target_recall=None,
                 repository_context_recall=None,
                 verification=verification,
@@ -354,6 +358,7 @@ class CodingAgentEvaluator:
             repository_cache_hits=repository_metrics.cache_hits,
             repository_index_builds=repository_metrics.index_builds,
             repository_cache_invalidations=repository_metrics.cache_invalidations,
+            repository_incremental_refreshes=repository_metrics.incremental_refreshes,
             repository_target_recall=repository_metrics.target_recall,
             repository_context_recall=repository_metrics.context_recall,
             verification=verification,
@@ -433,7 +438,8 @@ def summarize_results(results: list[EvaluationResult]) -> EvaluationSummary:
             total_repository_context_characters=0,
             average_repository_search_duration_seconds=0.0,
             total_repository_cache_hits=0, total_repository_index_builds=0,
-            total_repository_cache_invalidations=0, repository_cache_hit_rate=None,
+            total_repository_cache_invalidations=0, total_repository_incremental_refreshes=0,
+            repository_cache_hit_rate=None,
             average_repository_target_recall=None,
             average_repository_context_recall=None,
         )
@@ -462,6 +468,9 @@ def summarize_results(results: list[EvaluationResult]) -> EvaluationSummary:
         total_repository_cache_hits=sum(result.repository_cache_hits for result in results),
         total_repository_index_builds=sum(result.repository_index_builds for result in results),
         total_repository_cache_invalidations=sum(result.repository_cache_invalidations for result in results),
+        total_repository_incremental_refreshes=sum(
+            result.repository_incremental_refreshes for result in results
+        ),
         repository_cache_hit_rate=(
             sum(result.repository_cache_hits for result in results)
             / sum(result.repository_search_calls for result in results)
@@ -542,10 +551,11 @@ def write_evaluation_report(
         f"- Repository cache hit rate: {_format_optional_rate(summary.repository_cache_hit_rate)}",
         f"- Repository index builds: {summary.total_repository_index_builds}",
         f"- Repository cache invalidations: {summary.total_repository_cache_invalidations}",
+        f"- Repository incremental refreshes: {summary.total_repository_incremental_refreshes}",
         f"- Average repository target recall: {_format_optional_rate(summary.average_repository_target_recall)}",
         f"- Average repository context recall: {_format_optional_rate(summary.average_repository_context_recall)}",
         "",
-        "| Case | Success | Hidden tests | Scope | Tool calls | Repo searches | Cache H/B/I | Target recall | Context recall | Failures | Task reason |",
+        "| Case | Success | Hidden tests | Scope | Tool calls | Repo searches | Cache H/B/I/R | Target recall | Context recall | Failures | Task reason |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|",
     ])
     for result in results:
@@ -555,7 +565,8 @@ def write_evaluation_report(
             f"{'pass' if result.hidden_tests_passed else 'fail'} | "
             f"{'pass' if result.scope_compliant else 'fail'} | {result.tool_calls} | "
             f"{result.repository_search_calls} | {result.repository_cache_hits}/"
-            f"{result.repository_index_builds}/{result.repository_cache_invalidations} | "
+            f"{result.repository_index_builds}/{result.repository_cache_invalidations}/"
+            f"{result.repository_incremental_refreshes} | "
             f"{_format_optional_rate(result.repository_target_recall)} | "
             f"{_format_optional_rate(result.repository_context_recall)} | "
             f"{failure_text} | "
@@ -677,6 +688,7 @@ def _repository_metrics(
             cache_hits=stats.cache_hits,
             index_builds=stats.index_builds,
             cache_invalidations=stats.cache_invalidations,
+            incremental_refreshes=stats.incremental_refreshes,
             target_recall=target_recall,
             context_recall=context_recall,
         )

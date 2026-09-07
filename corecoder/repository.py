@@ -21,6 +21,7 @@ _SYMBOL_PATTERN = re.compile(
     re.MULTILINE,
 )
 _IMPORT_PATTERN = re.compile(r"^\s*(?:from|import)\s+([A-Za-z_][A-Za-z0-9_.]*)", re.MULTILINE)
+RepositoryFingerprint = tuple[tuple[str, int, int], ...]
 
 
 @dataclass(frozen=True)
@@ -72,26 +73,35 @@ class RepositoryIndex:
         for path, relative in _iter_repository_files(base):
             if path.suffix.lower() not in _TEXT_SUFFIXES or path.stat().st_size > max_file_bytes:
                 continue
-            try:
-                text = path.read_text(encoding="utf-8", errors="ignore")
-            except OSError:
+            document = _read_document(base, path, relative)
+            if document is None:
                 continue
-            documents.append(
-                RepositoryDocument(
-                    path=path,
-                    relative_path=relative.as_posix(),
-                    text=text,
-                    lines=tuple(text.splitlines()),
-                    terms=Counter(_tokenize(f"{relative.as_posix()} {text}")),
-                    symbols=frozenset(symbol.lower() for symbol in _SYMBOL_PATTERN.findall(text)),
-                    references=frozenset(
-                        module.split(".")[-1].lower() for module in _IMPORT_PATTERN.findall(text)
-                    ),
-                )
-            )
+            documents.append(document)
             if len(documents) >= max_files:
                 break
         return cls(base, documents)
+
+    def refresh(
+        self,
+        previous_fingerprint: RepositoryFingerprint,
+        current_fingerprint: RepositoryFingerprint,
+    ) -> RepositoryIndex:
+        """只重读变化文件，并重建轻量倒排结构。
+
+        未变化文档直接复用已解析对象；新增、修改和删除均由两次指纹差异决定。
+        """
+
+        previous = {path: (size, modified) for path, size, modified in previous_fingerprint}
+        existing = {document.relative_path: document for document in self.documents}
+        documents: list[RepositoryDocument] = []
+        for relative_path, size, modified in current_fingerprint:
+            document = existing.get(relative_path)
+            if document is None or previous.get(relative_path) != (size, modified):
+                relative = Path(relative_path)
+                document = _read_document(self.root, self.root / relative, relative)
+            if document is not None:
+                documents.append(document)
+        return type(self)(self.root, documents)
 
     def search(self, query: str, *, limit: int = 10) -> list[RepositorySearchHit]:
         terms = tuple(dict.fromkeys(_tokenize(query)))
@@ -169,7 +179,7 @@ def repository_fingerprint(
     *,
     max_files: int = 5000,
     max_file_bytes: int = 512_000,
-) -> tuple[tuple[str, int, int], ...]:
+) -> RepositoryFingerprint:
     """生成轻量仓库指纹，用于判断内存索引是否仍然有效。
 
     指纹只读取文件元数据，不读取正文。与重新分词整个仓库相比，它适合在
@@ -204,6 +214,23 @@ def _iter_repository_files(base: Path):
         for name in sorted(file_names):
             path = Path(directory) / name
             yield path, path.relative_to(base)
+
+
+def _read_document(base: Path, path: Path, relative: Path) -> RepositoryDocument | None:
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None
+    relative_path = relative.as_posix()
+    return RepositoryDocument(
+        path=path,
+        relative_path=relative_path,
+        text=text,
+        lines=tuple(text.splitlines()),
+        terms=Counter(_tokenize(f"{relative_path} {text}")),
+        symbols=frozenset(symbol.lower() for symbol in _SYMBOL_PATTERN.findall(text)),
+        references=frozenset(module.split(".")[-1].lower() for module in _IMPORT_PATTERN.findall(text)),
+    )
 
 
 def _tokenize(text: str) -> list[str]:

@@ -1,4 +1,4 @@
-from corecoder.repository import RepositoryIndex
+from corecoder.repository import RepositoryIndex, repository_fingerprint
 from corecoder.tools import get_tool
 
 
@@ -54,6 +54,7 @@ def test_repository_search_tool_returns_bounded_explainable_context(tmp_path) ->
     assert stats.cache_hits == 0
     assert stats.index_builds == 1
     assert stats.cache_invalidations == 0
+    assert stats.incremental_refreshes == 0
 
 
 def test_repository_search_handles_empty_and_missing_inputs(tmp_path) -> None:
@@ -125,6 +126,29 @@ def test_repository_search_invalidates_cache_after_file_change(tmp_path) -> None
     assert "service.py" in result
     assert "new_health_check" in result
     stats = tool.stats()
-    assert stats.index_builds == 2
+    assert stats.index_builds == 1
     assert stats.cache_hits == 0
     assert stats.cache_invalidations == 1
+    assert stats.incremental_refreshes == 1
+
+
+def test_repository_refresh_handles_changed_added_and_deleted_files(tmp_path) -> None:
+    stable = tmp_path / "stable.py"
+    changed = tmp_path / "changed.py"
+    removed = tmp_path / "removed.py"
+    stable.write_text("def stable_symbol(): pass\n", encoding="utf-8")
+    changed.write_text("def old_symbol(): pass\n", encoding="utf-8")
+    removed.write_text("def removed_symbol(): pass\n", encoding="utf-8")
+    before = repository_fingerprint(tmp_path)
+    index = RepositoryIndex.build(tmp_path)
+    stable_document = next(document for document in index.documents if document.relative_path == "stable.py")
+
+    changed.write_text("def new_symbol_with_longer_name(): pass\n", encoding="utf-8")
+    removed.unlink()
+    (tmp_path / "added.py").write_text("def added_symbol(): pass\n", encoding="utf-8")
+    refreshed = index.refresh(before, repository_fingerprint(tmp_path))
+
+    assert next(document for document in refreshed.documents if document.relative_path == "stable.py") is stable_document
+    assert refreshed.search("new_symbol_with_longer_name")[0].path == "changed.py"
+    assert refreshed.search("added_symbol")[0].path == "added.py"
+    assert not refreshed.search("removed_symbol")

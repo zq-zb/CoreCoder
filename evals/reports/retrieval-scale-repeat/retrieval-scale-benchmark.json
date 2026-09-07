@@ -1,0 +1,34 @@
+{
+  "query": "critical_payment_handler",
+  "repetitions": 7,
+  "points": [
+    {
+      "files": 100,
+      "cold_duration_ms": 99.66919999715174,
+      "average_warm_duration_ms": 17.600700000912184,
+      "warm_p95_duration_ms": 20.157799997832626,
+      "speedup": 5.662797501916755
+    },
+    {
+      "files": 500,
+      "cold_duration_ms": 499.8933000024408,
+      "average_warm_duration_ms": 69.14651666738791,
+      "warm_p95_duration_ms": 74.46269999491051,
+      "speedup": 7.229479142196749
+    },
+    {
+      "files": 1000,
+      "cold_duration_ms": 976.4129999966826,
+      "average_warm_duration_ms": 133.27500000135237,
+      "warm_p95_duration_ms": 136.1994000035338,
+      "speedup": 7.326302757357155
+    },
+    {
+      "files": 3000,
+      "cold_duration_ms": 2753.9715000020806,
+      "average_warm_duration_ms": 415.27793333443697,
+      "warm_p95_duration_ms": 436.0426999992342,
+      "speedup": 6.631634572753031
+    }
+  ]
+}
