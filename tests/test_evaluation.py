@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from corecoder.agent import Agent
@@ -112,7 +113,10 @@ def test_evaluator_independently_verifies_success_and_collects_metrics():
 
 
 def test_evaluator_collects_repository_retrieval_quality_and_cost_metrics():
-    case = discover_cases(CASES_ROOT)[0]
+    case = replace(
+        discover_cases(CASES_ROOT)[0],
+        relevant_context_files=("calculator.py", "test_calculator.py"),
+    )
     evaluator = CodingAgentEvaluator(_calculator_agent_with_search)
 
     result = evaluator.run_case(case)
@@ -124,8 +128,10 @@ def test_evaluator_collects_repository_retrieval_quality_and_cost_metrics():
     assert result.repository_context_characters > 0
     assert result.repository_search_duration_seconds > 0
     assert result.repository_target_recall == 1.0
+    assert result.repository_context_recall == 1.0
     assert summary.total_repository_search_calls == 1
     assert summary.average_repository_target_recall == 1.0
+    assert summary.average_repository_context_recall == 1.0
 
 
 def test_stability_summary_distinguishes_flaky_case():

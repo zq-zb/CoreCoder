@@ -49,6 +49,7 @@ class EvaluationCase:
     workspace_dir: Path
     verification: VerificationSpec
     allowed_changed_files: tuple[str, ...]
+    relevant_context_files: tuple[str, ...] = ()
     max_tool_calls: int = 20
     max_fix_attempts: int = 3
     tags: tuple[str, ...] = ()
@@ -70,6 +71,9 @@ class EvaluationCase:
                 timeout=float(verification_data.get("timeout", 30.0)),
             ),
             allowed_changed_files=tuple(_normalize_relative_path(value) for value in data["allowed_changed_files"]),
+            relevant_context_files=tuple(
+                _normalize_relative_path(value) for value in data.get("relevant_context_files", [])
+            ),
             max_tool_calls=int(data.get("max_tool_calls", 20)),
             max_fix_attempts=int(data.get("max_fix_attempts", 3)),
             tags=tuple(str(value) for value in data.get("tags", [])),
@@ -86,6 +90,11 @@ class EvaluationCase:
             raise ValueError("验收命令不能为空，且超时时间必须大于 0")
         if self.max_tool_calls <= 0 or self.max_fix_attempts < 0:
             raise ValueError("工具调用上限必须大于 0，修复次数不能小于 0")
+        missing_context = [
+            path for path in self.relevant_context_files if not (self.workspace_dir / path).is_file()
+        ]
+        if missing_context:
+            raise ValueError(f"相关上下文文件不存在：{', '.join(missing_context)}")
 
 
 @dataclass(frozen=True)
@@ -128,6 +137,7 @@ class EvaluationResult:
     repository_context_characters: int
     repository_search_duration_seconds: float
     repository_target_recall: float | None
+    repository_context_recall: float | None
     verification: VerificationResult
     agent_response: str
 
@@ -154,6 +164,7 @@ class EvaluationSummary:
     total_repository_context_characters: int
     average_repository_search_duration_seconds: float
     average_repository_target_recall: float | None
+    average_repository_context_recall: float | None
 
 
 @dataclass(frozen=True)
@@ -226,6 +237,7 @@ class CodingAgentEvaluator:
                 repository_context_characters=0,
                 repository_search_duration_seconds=0.0,
                 repository_target_recall=None,
+                repository_context_recall=None,
                 verification=verification,
                 agent_response=f"Agent 初始化失败：{error}",
             )
@@ -282,7 +294,11 @@ class CodingAgentEvaluator:
         cost_after = _estimated_cost(agent)
         estimated_cost = None if cost_before is None or cost_after is None else max(0.0, cost_after - cost_before)
         context_stats = agent.context.stats()
-        repository_metrics = _repository_metrics(agent, case.allowed_changed_files)
+        repository_metrics = _repository_metrics(
+            agent,
+            case.allowed_changed_files,
+            case.relevant_context_files,
+        )
         result = EvaluationResult(
             case_id=case.case_id,
             success=not failures,
@@ -311,6 +327,7 @@ class CodingAgentEvaluator:
             repository_context_characters=repository_metrics[2],
             repository_search_duration_seconds=repository_metrics[3],
             repository_target_recall=repository_metrics[4],
+            repository_context_recall=repository_metrics[5],
             verification=verification,
             agent_response=task_report.final_response,
         )
@@ -387,6 +404,7 @@ def summarize_results(results: list[EvaluationResult]) -> EvaluationSummary:
             total_repository_search_calls=0, average_repository_search_results=0.0,
             total_repository_context_characters=0,
             average_repository_search_duration_seconds=0.0, average_repository_target_recall=None,
+            average_repository_context_recall=None,
         )
     costs = [result.estimated_cost for result in results]
     total_cost = None if any(cost is None for cost in costs) else sum(cost or 0.0 for cost in costs)
@@ -412,6 +430,9 @@ def summarize_results(results: list[EvaluationResult]) -> EvaluationSummary:
         ),
         average_repository_target_recall=_average_optional(
             [result.repository_target_recall for result in results]
+        ),
+        average_repository_context_recall=_average_optional(
+            [result.repository_context_recall for result in results]
         ),
     )
 
@@ -479,9 +500,10 @@ def write_evaluation_report(
         f"- Repository context characters: {summary.total_repository_context_characters}",
         f"- Average repository search duration: {summary.average_repository_search_duration_seconds:.4f}s",
         f"- Average repository target recall: {_format_optional_rate(summary.average_repository_target_recall)}",
+        f"- Average repository context recall: {_format_optional_rate(summary.average_repository_context_recall)}",
         "",
-        "| Case | Success | Hidden tests | Scope | Tool calls | Repo searches | Target recall | Failures | Task reason |",
-        "|---|---:|---:|---:|---:|---:|---:|---|---|",
+        "| Case | Success | Hidden tests | Scope | Tool calls | Repo searches | Target recall | Context recall | Failures | Task reason |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---|---|",
     ])
     for result in results:
         failure_text = ", ".join(failure.value for failure in result.failures) or "-"
@@ -490,6 +512,7 @@ def write_evaluation_report(
             f"{'pass' if result.hidden_tests_passed else 'fail'} | "
             f"{'pass' if result.scope_compliant else 'fail'} | {result.tool_calls} | "
             f"{result.repository_search_calls} | {_format_optional_rate(result.repository_target_recall)} | "
+            f"{_format_optional_rate(result.repository_context_recall)} | "
             f"{failure_text} | "
             f"{(result.task_failure_reason or '-').replace('|', '/')} |"
         )
@@ -582,7 +605,8 @@ def _estimated_cost(agent: Agent) -> float | None:
 def _repository_metrics(
     agent: Agent,
     target_files: tuple[str, ...],
-) -> tuple[int, int, int, float, float | None]:
+    context_files: tuple[str, ...],
+) -> tuple[int, int, int, float, float | None, float | None]:
     """从可能被工作区守卫包装的检索工具中提取稳定指标。"""
 
     for candidate in agent.tools:
@@ -593,17 +617,22 @@ def _repository_metrics(
             continue
         stats = tool.stats()
         if stats.calls == 0:
-            return 0, 0, 0, 0.0, None
+            return 0, 0, 0, 0.0, None, None
         targets = set(target_files)
-        recall = len(targets.intersection(stats.returned_paths)) / len(targets) if targets else None
+        contexts = set(context_files)
+        target_recall = len(targets.intersection(stats.returned_paths)) / len(targets) if targets else None
+        context_recall = (
+            len(contexts.intersection(stats.returned_paths)) / len(contexts) if contexts else None
+        )
         return (
             stats.calls,
             stats.returned_results,
             stats.context_characters,
             stats.duration_seconds,
-            recall,
+            target_recall,
+            context_recall,
         )
-    return 0, 0, 0, 0.0, None
+    return 0, 0, 0, 0.0, None, None
 
 
 def _average_optional(values: list[float | None]) -> float | None:

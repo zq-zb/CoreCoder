@@ -3,6 +3,7 @@
   "task": "checkout.py 的订单总价计算错误。沿调用关系定位根因，只修改必要的实现文件，并运行可见测试。",
   "workspace": "workspace",
   "allowed_changed_files": ["pricing.py"],
+  "relevant_context_files": ["checkout.py", "pricing.py", "test_checkout.py"],
   "max_tool_calls": 16,
   "max_fix_attempts": 3,
   "tags": ["multi-file", "call-chain"],
