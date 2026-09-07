@@ -12,6 +12,10 @@ venv/
 .mypy_cache/
 .ruff_cache/
 .corecoder_history
+.corecoder/
 .DS_Store
 .pytest_cache/
 .tmp/
+.claude/settings.local.json
+# 真实模型原始报告可能包含本机临时目录；公开仓库只保留脱敏后的 Markdown 汇总。
+evals/reports/deepseek-*/evaluation.json

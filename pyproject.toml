@@ -44,6 +44,13 @@ dev = ["pytest>=7.0", "ruff>=0.9.0"]
 
 [project.scripts]
 corecoder = "corecoder.cli:main"
+corecoder-eval = "corecoder.eval_cli:main"
+corecoder-approval = "corecoder.approval_cli:main"
+corecoder-doctor = "corecoder.doctor:main"
+corecoder-task = "corecoder.task_cli:main"
+corecoder-benchmark = "corecoder.benchmark:main"
+corecoder-resilience = "corecoder.resilience:main"
+corecoder-metrics = "corecoder.metrics:main"
 
 [project.urls]
 Homepage = "https://github.com/he-yufeng/CoreCoder"
@@ -58,3 +65,8 @@ target-version = "py310"
 # 工具层和 CLI 位于程序边界，需要把第三方异常转换成可读错误信息；
 # 工具的 JSON Schema 也是有意共享的只读类级元数据。
 ignore = ["BLE001", "RUF012", "S110"]
+
+[tool.pytest.ini_options]
+# 评测数据集中的 hidden_tests 由 Evaluator 在隔离环境中单独运行，
+# 不属于 CoreCoder 框架自身的回归测试。
+testpaths = ["tests"]
