@@ -10,6 +10,7 @@ from corecoder.agent import Agent
 from corecoder.audit import AuditLogger
 from corecoder.incident import CIIncidentCoordinator, write_incident_report
 from corecoder.llm import LLMResponse, ScriptedLLM, ToolCall
+from corecoder.shell_command import command_in_directory
 from corecoder.task_store import TaskStore
 from corecoder.task_worker import DurableCodingWorker
 from corecoder.tools import get_tool
@@ -49,7 +50,7 @@ def main() -> int:
         "    def test_add(self):\n        self.assertEqual(add(2, 3), 5)\n",
         encoding="utf-8",
     )
-    command = f'cd /d "{workspace}" && "{sys.executable}" -B -m unittest "{test_file.name}"'
+    command = command_in_directory(workspace, [sys.executable, "-B", "-m", "unittest", test_file.name])
     scripted = ScriptedLLM(
         [
             LLMResponse(tool_calls=[ToolCall("read", "read_file", {"file_path": str(source)})]),

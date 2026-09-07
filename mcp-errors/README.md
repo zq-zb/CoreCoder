@@ -6,3 +6,4 @@
 - `02-environment-and-test-isolation.md`：Python 环境、PowerShell 激活、`.env` 测试污染与构建后端问题。
 - `03-timeout-cancellation-and-cleanup.md`：超时不等于取消、取消异常被吞和两阶段强制清理。
 - `04-development-workflow-issues.md`：终端编码、stdio 日志、Ruff 格式和文档路径错误。
+- `05-ci-version-and-platform-compatibility.md`：Python 3.10 时间 API 与跨平台 Shell 命令导致的 CI 失败。

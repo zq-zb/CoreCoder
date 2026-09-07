@@ -13,7 +13,7 @@ import tempfile
 import threading
 import time
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .task_store import TaskStatus, TaskStore
@@ -112,7 +112,7 @@ def run_queue_benchmark(*, task_count: int = 200, worker_count: int = 8) -> Queu
         duplicate_claims = len(claimed_ids) - len(set(claimed_ids))
         total_duration = time.perf_counter() - total_started
         return QueueBenchmarkResult(
-            created_at_utc=datetime.now(UTC).isoformat(),
+            created_at_utc=datetime.now(timezone.utc).isoformat(),
             platform=platform.platform(),
             python_version=platform.python_version(),
             sqlite_version=sqlite3.sqlite_version,

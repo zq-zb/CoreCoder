@@ -17,13 +17,14 @@ from corecoder.evaluation import (
     write_evaluation_report,
 )
 from corecoder.llm import LLMResponse, ScriptedLLM, ToolCall
+from corecoder.shell_command import command_in_directory
 from corecoder.tools import get_tool
 
 CASES_ROOT = Path(__file__).parents[1] / "evals" / "cases"
 
 
 def _visible_test_command(workspace: Path, filename: str) -> str:
-    return f'cd /d "{workspace}" && "{sys.executable}" -B -m pytest "{filename}" -q'
+    return command_in_directory(workspace, [sys.executable, "-B", "-m", "pytest", filename, "-q"])
 
 
 def _calculator_agent(case, workspace: Path, *, write_extra: bool = False) -> Agent:

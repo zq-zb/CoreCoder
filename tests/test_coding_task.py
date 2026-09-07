@@ -5,11 +5,12 @@ import sys
 from corecoder.agent import Agent
 from corecoder.coding_task import CodingTaskRunner, CodingTaskState
 from corecoder.llm import LLMResponse, ScriptedLLM, ToolCall
+from corecoder.shell_command import command_in_directory
 from corecoder.tools import get_tool
 
 
 def _test_command(test_file) -> str:
-    return f'cd /d "{test_file.parent}" && "{sys.executable}" -B -m unittest "{test_file.name}"'
+    return command_in_directory(test_file.parent, [sys.executable, "-B", "-m", "unittest", test_file.name])
 
 
 def test_coding_task_repairs_failure_and_verifies_latest_edit(tmp_path):

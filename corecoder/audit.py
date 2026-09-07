@@ -7,7 +7,7 @@ import json
 import re
 import threading
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -47,7 +47,7 @@ class AuditLogger:
     def record(self, tool_name: str, arguments: dict[str, Any], result: str, duration_seconds: float) -> None:
         safe_result = redact_text(result)
         record = AuditRecord(
-            timestamp_utc=datetime.now(UTC).isoformat(),
+            timestamp_utc=datetime.now(timezone.utc).isoformat(),
             task_id=self.task_id,
             tool_name=tool_name,
             status=_result_status(result),

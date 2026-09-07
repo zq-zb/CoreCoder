@@ -7,6 +7,7 @@ from pathlib import Path
 from corecoder.agent import Agent
 from corecoder.coding_task import CodingTaskRunner
 from corecoder.llm import LLMResponse, ScriptedLLM, ToolCall
+from corecoder.shell_command import command_in_directory
 from corecoder.tools import get_tool
 
 
@@ -23,7 +24,7 @@ def main() -> None:
         encoding="utf-8",
     )
     # -B 避免极快修改且文件大小不变时，下一个 Python 进程命中旧 .pyc。
-    test_command = f'cd /d "{workspace}" && "{sys.executable}" -B -m unittest "{test_file.name}"'
+    test_command = command_in_directory(workspace, [sys.executable, "-B", "-m", "unittest", test_file.name])
 
     script = [
         LLMResponse(content="先读取问题代码。", tool_calls=[ToolCall("1", "read_file", {"file_path": str(source)})]),

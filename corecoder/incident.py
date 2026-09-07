@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -133,7 +133,7 @@ class CIIncidentCoordinator:
             failure_reason=task.last_error,
             evidence_sha256=str(incident["evidence_sha256"]),
             audit_records=_count_jsonl_records(audit_path),
-            created_at_utc=datetime.now(UTC).isoformat(),
+            created_at_utc=datetime.now(timezone.utc).isoformat(),
         )
 
     def audit_path(self, task_id: str) -> Path:

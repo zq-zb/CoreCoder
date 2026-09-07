@@ -10,7 +10,7 @@ import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .security import ApprovalManager
@@ -51,7 +51,7 @@ def run_resilience_campaign() -> ResilienceCampaignReport:
     results = tuple(scenario() for scenario in scenarios)
     passed = sum(result.passed for result in results)
     return ResilienceCampaignReport(
-        created_at_utc=datetime.now(UTC).isoformat(),
+        created_at_utc=datetime.now(timezone.utc).isoformat(),
         total_scenarios=len(results),
         passed_scenarios=passed,
         pass_rate=passed / len(results),

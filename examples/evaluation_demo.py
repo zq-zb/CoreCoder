@@ -6,6 +6,7 @@ from pathlib import Path
 from corecoder.agent import Agent
 from corecoder.evaluation import CodingAgentEvaluator, discover_cases, write_evaluation_report
 from corecoder.llm import LLMResponse, ScriptedLLM, ToolCall
+from corecoder.shell_command import command_in_directory
 from corecoder.tools import get_tool
 
 ROOT = Path(__file__).parents[1]
@@ -37,9 +38,9 @@ def create_demo_agent(case, workspace: Path) -> Agent:
                     "test",
                     "bash",
                     {
-                        "command": (
-                            f'cd /d "{workspace}" && '
-                            f'"{sys.executable}" -B -m pytest "{visible_test.name}" -q'
+                        "command": command_in_directory(
+                            workspace,
+                            [sys.executable, "-B", "-m", "pytest", visible_test.name, "-q"],
                         )
                     },
                 )
