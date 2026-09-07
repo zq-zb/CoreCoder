@@ -13,6 +13,7 @@
 - [09 · 规模基准与增量索引](09-scale-benchmark-incremental-index.md)：用大型合成仓库证明瓶颈，再按指纹差异只重读变化文件。
 - [10 · Agent 检索 A/B](10-retrieval-agent-ab.md)：修复真实评测未注册检索工具的缺口，并建立公平的 on/off 实验开关。
 - [11 · 真实检索实验](11-real-retrieval-experiment.md)：记录 DeepSeek 负结果、实验有效性检查、guided 运行时策略与报告脱敏。
+- [12 · guided 检索真实对照](12-guided-retrieval-ab.md)：验证运行时引导让模型真正采用检索，并诚实记录 Recall、Token 和证据边界。
 
 ## 1. 为什么 Coding Agent 需要上下文工程
 
@@ -97,4 +98,5 @@ Coding Agent 会不断读取文件、执行命令、接收错误并修改代码�
 12. 已完成：让真实评测 Agent 使用检索，并提供同模型、同数据集的 on/off A/B 开关。
 13. 已完成：真实模型冒烟揭示工具未被采用，并新增实验对比器和证据警告。
 14. 已完成：把检索拆成 off、available、guided，并在运行时保证首次检索顺序。
-15. 下一步：离线验证 guided 完整链路后，再由用户决定是否付费复测。
+15. 已完成：真实 off/guided 对照中检索被实际执行，目标文件 Recall 为 100%。
+16. 下一步：扩展到 3 个跨文件案例并重复运行，或先优化检索上下文的 Token 成本。

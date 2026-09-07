@@ -114,6 +114,7 @@ def test_evaluator_independently_verifies_success_and_collects_metrics():
     assert result.repository_cache_hits == 0
     assert result.repository_index_builds == 0
     assert result.repository_incremental_refreshes == 0
+    assert result.retrieval_policy_rejections == 0
     assert result.repository_target_recall is None
 
 
@@ -143,6 +144,7 @@ def test_evaluator_collects_repository_retrieval_quality_and_cost_metrics():
     assert summary.total_repository_index_builds == 1
     assert summary.total_repository_cache_invalidations == 0
     assert summary.total_repository_incremental_refreshes == 0
+    assert summary.total_retrieval_policy_rejections == 0
     assert summary.repository_cache_hit_rate == 0.0
     assert summary.average_repository_target_recall == 1.0
     assert summary.average_repository_context_recall == 1.0
@@ -171,6 +173,7 @@ def test_summary_calculates_repository_cache_hit_rate():
         repository_index_builds=1,
         repository_cache_invalidations=0,
         repository_incremental_refreshes=0,
+        retrieval_policy_rejections=0,
     )
 
     summary = summarize_results([cached])

@@ -1,0 +1,18 @@
+{
+  "baseline_strategy": "structured-memory+retrieval-off",
+  "candidate_strategy": "structured-memory+retrieval-guided",
+  "comparable": true,
+  "cases_per_group": 1,
+  "success_rate_delta": 0.0,
+  "hidden_test_pass_rate_delta": 0.0,
+  "average_tool_calls_delta": 1.0,
+  "average_duration_seconds_delta": -1.0227889000088908,
+  "average_prompt_tokens_delta": 2882.0,
+  "average_completion_tokens_delta": -277.0,
+  "candidate_repository_search_calls": 1,
+  "candidate_retrieval_policy_rejections": 1,
+  "warnings": [
+    "每组少于 3 次结果，只能视为链路冒烟，不能证明稳定提升",
+    "模型费用不可用，应使用 Token 指标比较资源消耗"
+  ]
+}

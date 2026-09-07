@@ -20,9 +20,13 @@ def _report(strategy: str, *, searches: int = 0, fingerprint: str = "same") -> d
             "total_prompt_tokens": 100,
             "total_completion_tokens": 20,
             "total_repository_search_calls": searches,
+            "total_retrieval_policy_rejections": 1 if "guided" in strategy else 0,
             "total_estimated_cost": None,
         },
-        "results": [{"case_id": "demo"}],
+        "results": [{
+            "case_id": "demo",
+            "tool_trace": ["bash", "repository_search"] if "guided" in strategy else [],
+        }],
     }
 
 
@@ -45,6 +49,15 @@ def test_comparison_rejects_mismatched_dataset() -> None:
 
     assert result.comparable is False
     assert any("dataset_fingerprint" in warning for warning in result.warnings)
+
+
+def test_comparison_infers_rejections_from_legacy_guided_trace() -> None:
+    result = compare_evaluation_reports(
+        _report("retrieval-off"),
+        _report("retrieval-guided", searches=1),
+    )
+
+    assert result.candidate_retrieval_policy_rejections == 1
 
 
 def test_comparison_writes_sanitized_reports(tmp_path) -> None:

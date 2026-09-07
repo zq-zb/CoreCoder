@@ -23,6 +23,7 @@ class EvaluationComparison:
     average_prompt_tokens_delta: float
     average_completion_tokens_delta: float
     candidate_repository_search_calls: int
+    candidate_retrieval_policy_rejections: int
     warnings: tuple[str, ...]
 
 
@@ -56,6 +57,9 @@ def compare_evaluation_reports(
         warnings.append("候选组没有实际调用 repository_search，不能归因于检索能力")
     if baseline_summary.get("total_estimated_cost") is None or candidate_summary.get("total_estimated_cost") is None:
         warnings.append("模型费用不可用，应使用 Token 指标比较资源消耗")
+    policy_rejections = candidate_summary.get("total_retrieval_policy_rejections")
+    if policy_rejections is None and "retrieval-guided" in candidate_strategy:
+        policy_rejections = _infer_guided_rejections(candidate_results)
 
     return EvaluationComparison(
         baseline_strategy=str(baseline_metadata.get("strategy", "unknown")),
@@ -69,6 +73,7 @@ def compare_evaluation_reports(
         average_prompt_tokens_delta=_average_delta(candidate_summary, baseline_summary, "total_prompt_tokens"),
         average_completion_tokens_delta=_average_delta(candidate_summary, baseline_summary, "total_completion_tokens"),
         candidate_repository_search_calls=repository_calls,
+        candidate_retrieval_policy_rejections=int(policy_rejections or 0),
         warnings=tuple(warnings),
     )
 
@@ -87,6 +92,7 @@ def write_comparison_report(result: EvaluationComparison, output_dir: str | Path
         f"- Comparable metadata: {'yes' if result.comparable else 'no'}",
         f"- Results per group: {result.cases_per_group}",
         f"- Candidate repository searches: {result.candidate_repository_search_calls}",
+        f"- Candidate policy rejections: {result.candidate_retrieval_policy_rejections}",
         "",
         "| Metric | Candidate - baseline |",
         "|---|---:|",
@@ -133,6 +139,20 @@ def _average_delta(candidate: dict[str, Any], baseline: dict[str, Any], field: s
     candidate_cases = max(1, int(candidate.get("total_cases", 0)))
     baseline_cases = max(1, int(baseline.get("total_cases", 0)))
     return float(candidate.get(field, 0)) / candidate_cases - float(baseline.get(field, 0)) / baseline_cases
+
+
+def _infer_guided_rejections(results: list[dict[str, Any]]) -> int:
+    """兼容指标字段加入前的 guided 报告，从首次检索前的轨迹恢复拒绝数。"""
+
+    guarded = {"bash", "glob", "grep", "read_file", "edit_file", "write_file"}
+    total = 0
+    for result in results:
+        for tool_name in result.get("tool_trace", []):
+            if tool_name == "repository_search":
+                break
+            if tool_name in guarded:
+                total += 1
+    return total
 
 
 if __name__ == "__main__":

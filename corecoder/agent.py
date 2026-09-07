@@ -45,6 +45,7 @@ class Agent:
         if repository_retrieval_policy == "guided" and "repository_search" not in self._tool_by_name:
             raise ValueError("guided 检索策略要求提供 repository_search 工具")
         self.repository_retrieval_policy = repository_retrieval_policy
+        self.retrieval_policy_rejections = 0
         self.context = ContextManager(
             max_tokens=max_context_tokens,
             structured_memory=context_strategy == "structured-memory",
@@ -110,6 +111,7 @@ class Agent:
                 )
                 if has_search and has_parallel_inspection:
                     # 首次检索不能与读取/修改并行，否则后者并没有消费检索结果。
+                    self.retrieval_policy_rejections += len(resp.tool_calls)
                     for tc in resp.tool_calls:
                         result = (
                             "Policy: run repository_search alone as the first repository operation; "
@@ -122,6 +124,7 @@ class Agent:
                 elif has_parallel_inspection:
                     # 提示词是软约束，部分模型仍会先广泛读取。guided 模式在执行层
                     # 拒绝第一次旁路检查，让实验能确定性地真正使用检索能力。
+                    self.retrieval_policy_rejections += len(resp.tool_calls)
                     for tc in resp.tool_calls:
                         result = (
                             "Policy: guided repository retrieval requires repository_search before "
@@ -240,6 +243,7 @@ class Agent:
     def reset(self):
         """Clear conversation history."""
         self.messages.clear()
+        self.retrieval_policy_rejections = 0
 
 
 _REPOSITORY_INSPECTION_TOOLS = {

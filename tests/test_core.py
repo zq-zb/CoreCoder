@@ -174,6 +174,7 @@ def test_guided_retrieval_rejects_broad_read_then_allows_search(tmp_path):
     assert "Repository context" in replies[1]
     assert "target_symbol" in replies[2]
     assert executed == ["repository_search", "read_file"]
+    assert agent.retrieval_policy_rejections == 1
 
 
 def test_guided_retrieval_rejects_search_parallel_with_read(tmp_path):
@@ -196,6 +197,7 @@ def test_guided_retrieval_rejects_search_parallel_with_read(tmp_path):
     replies = [message["content"] for message in agent.messages if message.get("role") == "tool"]
     assert len(replies) == 2
     assert all("run repository_search alone" in reply for reply in replies)
+    assert agent.retrieval_policy_rejections == 2
 
 
 def test_context_compress():
