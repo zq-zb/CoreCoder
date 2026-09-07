@@ -37,7 +37,7 @@ def _coding_tools(*, repository_retrieval: bool = True):
     return tools
 
 
-def _agent_factory(config: Config, strategy: str, *, repository_retrieval: bool = True):
+def _agent_factory(config: Config, strategy: str, *, retrieval_mode: str = "guided"):
     def create(case: EvaluationCase, workspace: Path) -> Agent:
         llm_class = LiteLLM if config.provider == "litellm" else LLM
         llm = llm_class(
@@ -49,10 +49,11 @@ def _agent_factory(config: Config, strategy: str, *, repository_retrieval: bool 
         )
         return Agent(
             llm=llm,
-            tools=_coding_tools(repository_retrieval=repository_retrieval),
+            tools=_coding_tools(repository_retrieval=retrieval_mode != "off"),
             max_context_tokens=config.max_context_tokens,
             max_rounds=case.max_tool_calls,
             context_strategy=strategy,
+            repository_retrieval_policy="guided" if retrieval_mode == "guided" else "available",
         )
 
     return create
@@ -77,9 +78,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--retrieval",
-        choices=("on", "off"),
-        default="on",
-        help="是否向 Agent 提供仓库检索工具；用于同模型、同数据集 A/B 对比",
+        choices=("off", "available", "guided"),
+        default="guided",
+        help="关闭检索、仅提供工具，或由运行时引导首次仓库检查；用于 A/B 对比",
     )
     options = parser.parse_args(argv)
     if options.repeat <= 0:
@@ -107,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     evaluator = CodingAgentEvaluator(
-        _agent_factory(config, options.strategy, repository_retrieval=options.retrieval == "on"),
+        _agent_factory(config, options.strategy, retrieval_mode=options.retrieval),
         keep_workspaces=options.keep_workspaces,
     )
     results = []

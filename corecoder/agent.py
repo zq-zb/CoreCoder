@@ -30,6 +30,7 @@ class Agent:
         max_context_tokens: int = 128_000,
         max_rounds: int = 50,
         context_strategy: str = "structured-memory",
+        repository_retrieval_policy: str = "available",
         audit_logger: AuditLogger | None = None,
     ):
         self.llm = llm
@@ -39,13 +40,18 @@ class Agent:
         if context_strategy not in {"baseline", "structured-memory"}:
             raise ValueError(f"未知上下文策略：{context_strategy}")
         self.context_strategy = context_strategy
+        if repository_retrieval_policy not in {"available", "guided"}:
+            raise ValueError(f"未知仓库检索策略：{repository_retrieval_policy}")
+        if repository_retrieval_policy == "guided" and "repository_search" not in self._tool_by_name:
+            raise ValueError("guided 检索策略要求提供 repository_search 工具")
+        self.repository_retrieval_policy = repository_retrieval_policy
         self.context = ContextManager(
             max_tokens=max_context_tokens,
             structured_memory=context_strategy == "structured-memory",
         )
         self.max_rounds = max_rounds
         self.audit_logger = audit_logger
-        self._system = system_prompt(self.tools)
+        self._system = system_prompt(self.tools, repository_retrieval_policy=repository_retrieval_policy)
 
         # wire up sub-agent capability
         # 构造 Agent 时，把自己传给 AgentTool，方便子 Agent 继承父 Agent 的 LLM、工具、上下文限制
@@ -65,6 +71,7 @@ class Agent:
         self.context.maybe_compress(self.messages, self.llm) # 压缩对话历史，防止超过最大上下文长度
 
         empty_responses = 0
+        retrieval_satisfied = self.repository_retrieval_policy != "guided"
         for _ in range(self.max_rounds):
             # 对话历史 + 工具信息 -> LLM -> 可能的工具调用
             resp = self.llm.chat(
@@ -95,6 +102,34 @@ class Agent:
             # tool calls -> execute (parallel when multiple, like Claude Code's
             # StreamingToolExecutor which runs independent tools concurrently)
             self.messages.append(resp.message)
+
+            if not retrieval_satisfied:
+                has_search = any(call.name == "repository_search" for call in resp.tool_calls)
+                has_parallel_inspection = any(
+                    call.name in _REPOSITORY_INSPECTION_TOOLS for call in resp.tool_calls
+                )
+                if has_search and has_parallel_inspection:
+                    # 首次检索不能与读取/修改并行，否则后者并没有消费检索结果。
+                    for tc in resp.tool_calls:
+                        result = (
+                            "Policy: run repository_search alone as the first repository operation; "
+                            "inspect or edit its ranked results in the next tool round."
+                        )
+                        self.messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+                    continue
+                if has_search:
+                    retrieval_satisfied = True
+                elif has_parallel_inspection:
+                    # 提示词是软约束，部分模型仍会先广泛读取。guided 模式在执行层
+                    # 拒绝第一次旁路检查，让实验能确定性地真正使用检索能力。
+                    for tc in resp.tool_calls:
+                        result = (
+                            "Policy: guided repository retrieval requires repository_search before "
+                            "bash/glob/grep/read/write operations. Search by the task's error, symbol, "
+                            "or behavior first, then inspect the strongest results."
+                        )
+                        self.messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+                    continue
 
             try:
                 if len(resp.tool_calls) == 1:
@@ -205,3 +240,8 @@ class Agent:
     def reset(self):
         """Clear conversation history."""
         self.messages.clear()
+
+
+_REPOSITORY_INSPECTION_TOOLS = {
+    "bash", "glob", "grep", "read_file", "edit_file", "write_file",
+}

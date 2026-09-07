@@ -11,7 +11,7 @@ import sys
 import tempfile
 import time
 from collections.abc import Callable, Iterable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -236,12 +236,17 @@ class CodingAgentEvaluator:
             agent = self.agent_factory(case, workspace)
         except Exception as error:
             verification = self._verify(case, workspace, run_root)
+            verification = replace(
+                verification,
+                output=_sanitize_report_text(verification.output, workspace, run_root),
+            )
+            error_text = _sanitize_report_text(str(error), workspace, run_root)
             result = EvaluationResult(
                 case_id=case.case_id,
                 success=False,
                 failures=(EvaluationFailure.AGENT_FAILED,),
                 task_state=CodingTaskState.FAILED.value,
-                task_failure_reason=str(error),
+                task_failure_reason=error_text,
                 task_events=(),
                 tool_trace=(),
                 hidden_tests_passed=verification.passed,
@@ -268,7 +273,7 @@ class CodingAgentEvaluator:
                 repository_target_recall=None,
                 repository_context_recall=None,
                 verification=verification,
-                agent_response=f"Agent 初始化失败：{error}",
+                agent_response=f"Agent 初始化失败：{error_text}",
             )
             if not self.keep_workspaces:
                 shutil.rmtree(run_root, ignore_errors=True)
@@ -297,6 +302,10 @@ class CodingAgentEvaluator:
             )
 
         verification = self._verify(case, workspace, run_root)
+        verification = replace(
+            verification,
+            output=_sanitize_report_text(verification.output, workspace, run_root),
+        )
         after = _snapshot_files(workspace)
         changed_files = tuple(sorted(_changed_paths(before, after)))
         allowed = set(case.allowed_changed_files)
@@ -333,9 +342,11 @@ class CodingAgentEvaluator:
             success=not failures,
             failures=tuple(failures),
             task_state=task_report.state.value,
-            task_failure_reason=task_report.failure_reason,
+            task_failure_reason=_sanitize_report_text(task_report.failure_reason, workspace, run_root),
             task_events=tuple(
-                f"{event.state.value}:{event.tool_name}:{event.summary}" for event in task_report.events
+                f"{event.state.value}:{event.tool_name}:"
+                f"{_sanitize_report_text(event.summary, workspace, run_root)}"
+                for event in task_report.events
             ),
             tool_trace=_tool_trace(agent.messages[message_start:]),
             hidden_tests_passed=verification.passed,
@@ -362,7 +373,7 @@ class CodingAgentEvaluator:
             repository_target_recall=repository_metrics.target_recall,
             repository_context_recall=repository_metrics.context_recall,
             verification=verification,
-            agent_response=task_report.final_response,
+            agent_response=_sanitize_report_text(task_report.final_response, workspace, run_root),
         )
         if not self.keep_workspaces:
             shutil.rmtree(run_root, ignore_errors=True)
@@ -643,6 +654,19 @@ def _normalize_relative_path(value: Any) -> str:
     if path.is_absolute() or ".." in path.parts:
         raise ValueError(f"允许修改的文件必须是工作区内相对路径：{value}")
     return path.as_posix()
+
+
+def _sanitize_report_text(value: str | None, workspace: Path, run_root: Path) -> str | None:
+    """移除评测临时绝对路径，避免公开报告暴露本机用户名和目录。"""
+
+    if value is None:
+        return None
+    sanitized = value
+    for path, marker in ((workspace, "<workspace>"), (run_root, "<run_root>")):
+        variants = {str(path), path.as_posix()}
+        for variant in variants:
+            sanitized = sanitized.replace(variant, marker)
+    return sanitized
 
 
 def _replace_placeholders(value: str, replacements: dict[str, str]) -> str:

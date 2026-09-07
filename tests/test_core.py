@@ -14,7 +14,7 @@ from corecoder import (
 from corecoder import session as session_module
 from corecoder.config import parse_config
 from corecoder.context import CompressionLayer, ContextManager, estimate_tokens
-from corecoder.llm import LLMResponse, ScriptedLLM
+from corecoder.llm import LLMResponse, ScriptedLLM, ToolCall
 from corecoder.session import list_sessions, load_session, save_session
 from corecoder.tools import get_tool
 
@@ -137,6 +137,65 @@ def test_agent_rejects_unknown_context_strategy():
         assert "未知上下文策略" in str(error)
     else:
         raise AssertionError("未知上下文策略必须被拒绝")
+
+
+def test_agent_rejects_guided_retrieval_without_search_tool():
+    llm = ScriptedLLM([LLMResponse(content="unused")])
+
+    try:
+        Agent(llm, tools=[get_tool("read_file")], repository_retrieval_policy="guided")
+    except ValueError as error:
+        assert "要求提供 repository_search" in str(error)
+    else:
+        raise AssertionError("guided 模式缺少检索工具时必须失败")
+
+
+def test_guided_retrieval_rejects_broad_read_then_allows_search(tmp_path):
+    source = tmp_path / "service.py"
+    source.write_text("def target_symbol(): return True\n", encoding="utf-8")
+    llm = ScriptedLLM([
+        LLMResponse(tool_calls=[ToolCall("read", "read_file", {"file_path": str(source)})]),
+        LLMResponse(tool_calls=[ToolCall(
+            "search", "repository_search", {"query": "target_symbol", "path": str(tmp_path)}
+        )]),
+        LLMResponse(tool_calls=[ToolCall("read2", "read_file", {"file_path": str(source)})]),
+        LLMResponse(content="完成"),
+    ])
+    agent = Agent(
+        llm,
+        tools=[get_tool("repository_search"), get_tool("read_file")],
+        repository_retrieval_policy="guided",
+    )
+    executed: list[str] = []
+
+    assert agent.chat("定位目标", on_tool=lambda name, arguments: executed.append(name)) == "完成"
+    replies = [message["content"] for message in agent.messages if message.get("role") == "tool"]
+    assert replies[0].startswith("Policy: guided repository retrieval")
+    assert "Repository context" in replies[1]
+    assert "target_symbol" in replies[2]
+    assert executed == ["repository_search", "read_file"]
+
+
+def test_guided_retrieval_rejects_search_parallel_with_read(tmp_path):
+    source = tmp_path / "service.py"
+    source.write_text("def target_symbol(): return True\n", encoding="utf-8")
+    llm = ScriptedLLM([
+        LLMResponse(tool_calls=[
+            ToolCall("search", "repository_search", {"query": "target_symbol", "path": str(tmp_path)}),
+            ToolCall("read", "read_file", {"file_path": str(source)}),
+        ]),
+        LLMResponse(content="已收到策略提示"),
+    ])
+    agent = Agent(
+        llm,
+        tools=[get_tool("repository_search"), get_tool("read_file")],
+        repository_retrieval_policy="guided",
+    )
+
+    assert agent.chat("定位目标") == "已收到策略提示"
+    replies = [message["content"] for message in agent.messages if message.get("role") == "tool"]
+    assert len(replies) == 2
+    assert all("run repository_search alone" in reply for reply in replies)
 
 
 def test_context_compress():

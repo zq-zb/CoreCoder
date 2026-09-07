@@ -4,12 +4,18 @@ import os
 import platform
 
 
-def system_prompt(tools) -> str:
+def system_prompt(tools, *, repository_retrieval_policy: str = "available") -> str:
     cwd = os.getcwd()
     tool_list = "\n".join(f"- **{t.name}**: {t.description}" for t in tools)
     uname = platform.uname()
     retrieval_rule = ""
-    if any(tool.name == "repository_search" for tool in tools):
+    if repository_retrieval_policy == "guided":
+        retrieval_rule = (
+            "\n10. **Guided retrieval policy.** For repository work, repository_search must be the first "
+            "inspection tool. Search by the task's error, symbol, or behavior before bash, glob, grep, "
+            "read_file, edit_file, or write_file. The runtime enforces this ordering."
+        )
+    elif any(tool.name == "repository_search" for tool in tools):
         retrieval_rule = (
             "\n10. **Retrieve before broad reading.** When the relevant file is unknown, "
             "use repository_search to rank likely files and snippets, then read only the strongest candidates."

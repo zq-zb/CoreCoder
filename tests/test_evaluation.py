@@ -100,6 +100,8 @@ def test_evaluator_independently_verifies_success_and_collects_metrics():
     assert result.success is True
     assert result.task_failure_reason is None
     assert result.task_events
+    assert any("<workspace>" in event for event in result.task_events)
+    assert all("corecoder-eval-" not in event for event in result.task_events)
     assert result.tool_trace == ("read_file", "edit_file", "bash")
     assert result.hidden_tests_passed is True
     assert result.changed_files == ("calculator.py",)

@@ -19,3 +19,6 @@ venv/
 .claude/settings.local.json
 # 真实模型原始报告可能包含本机临时目录；公开仓库只保留脱敏后的 Markdown 汇总。
 evals/reports/deepseek-*/evaluation.json
+# 真实模型原始报告保留在本机；公开仓库提交不含提示/回复的聚合对比。
+evals/reports/agent-retrieval-off-*/
+evals/reports/agent-retrieval-on-*/
