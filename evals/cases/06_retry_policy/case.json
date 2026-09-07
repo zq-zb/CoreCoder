@@ -1,0 +1,13 @@
+{
+  "id": "retry-policy-boundary",
+  "task": "修复 retry_policy.py：只重试 429 和 5xx，并且当前 attempt 达到 max_attempts 后不再重试。做最小修改并运行可见测试。",
+  "workspace": "workspace",
+  "allowed_changed_files": ["retry_policy.py"],
+  "max_tool_calls": 12,
+  "max_fix_attempts": 2,
+  "tags": ["reliability", "boundary"],
+  "verification": {
+    "command": ["{python}", "-B", "-m", "pytest", "{case_dir}/hidden_tests/test_acceptance.py", "-q"],
+    "timeout": 20
+  }
+}

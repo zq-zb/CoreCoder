@@ -14,6 +14,9 @@ CoreCoder implements the same idea in 3 layers:
 
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -36,14 +39,48 @@ def estimate_tokens(messages: list[dict]) -> int:
     return total
 
 
+class CompressionLayer(str, Enum):
+    """可观测的上下文压缩层级。"""
+
+    TOOL_SNIP = "tool_snip"
+    SUMMARY = "summary"
+    HARD_COLLAPSE = "hard_collapse"
+
+
+@dataclass(frozen=True)
+class CompressionEvent:
+    """一次压缩动作的指标，用于评测策略而不是只凭感觉优化。"""
+
+    layer: CompressionLayer
+    tokens_before: int
+    tokens_after: int
+    messages_before: int
+    messages_after: int
+
+    @property
+    def tokens_saved(self) -> int:
+        return max(0, self.tokens_before - self.tokens_after)
+
+
+@dataclass(frozen=True)
+class ContextStats:
+    """一个 Agent 生命周期内的压缩统计。"""
+
+    compression_count: int
+    tokens_saved: int
+    events_by_layer: dict[str, int]
+
+
 class ContextManager:
-    def __init__(self, max_tokens: int = 128_000):
+    def __init__(self, max_tokens: int = 128_000, *, structured_memory: bool = True):
         self.max_tokens = max_tokens
+        self.structured_memory = structured_memory
         # layer thresholds (fraction of max_tokens)
         # 三层比例
         self._snip_at = int(max_tokens * 0.50)  # 50% -> snip tool outputs
         self._summarize_at = int(max_tokens * 0.70)  # 70% -> LLM summarize
         self._collapse_at = int(max_tokens * 0.90)  # 90% -> hard collapse
+        self.events: list[CompressionEvent] = []
 
     # 估算用的 token 数量，粗略计算，混合中英文大约 3 个字符算一个 token
     def maybe_compress(self, messages: list[dict], llm: LLM | None = None) -> bool:
@@ -53,26 +90,57 @@ class ContextManager:
 
         # 第一层：旧的工具输出过长，截断为首尾几行
         # Layer 1: snip verbose tool outputs
-        if current > self._snip_at and self._snip_tool_outputs(messages):
-            compressed = True
-            current = estimate_tokens(messages)
+        if current > self._snip_at:
+            before_messages = len(messages)
+            before_tokens = current
+            changed = self._snip_tool_outputs(messages, preserve_recent=6)
+            if changed:
+                current = estimate_tokens(messages)
+                self._record_event(
+                    CompressionLayer.TOOL_SNIP,
+                    before_tokens,
+                    current,
+                    before_messages,
+                    len(messages),
+                )
+                compressed = True
 
         # 第二层：旧对话写个摘要
         # Layer 2: LLM-powered summarization of old turns
-        if current > self._summarize_at and len(messages) > 10 and self._summarize_old(messages, llm, keep_recent=8):
-            compressed = True
-            current = estimate_tokens(messages)
+        if current > self._summarize_at and len(messages) > 10:
+            before_messages = len(messages)
+            before_tokens = current
+            if self._summarize_old(messages, llm, keep_recent=8):
+                current = estimate_tokens(messages)
+                self._record_event(
+                    CompressionLayer.SUMMARY,
+                    before_tokens,
+                    current,
+                    before_messages,
+                    len(messages),
+                )
+                compressed = True
 
         # Layer 3: hard collapse - last resort
         # 第三层：只保留最后几条消息 + 摘要，丢掉其他所有内容
         if current > self._collapse_at and len(messages) > 4:
+            before_messages = len(messages)
+            before_tokens = current
             self._hard_collapse(messages, llm)
+            current = estimate_tokens(messages)
+            self._record_event(
+                CompressionLayer.HARD_COLLAPSE,
+                before_tokens,
+                current,
+                before_messages,
+                len(messages),
+            )
             compressed = True
 
         return compressed
 
     @staticmethod
-    def _snip_tool_outputs(messages: list[dict]) -> bool:
+    def _snip_tool_outputs(messages: list[dict], preserve_recent: int = 0) -> bool:
         """Layer 1: Truncate tool results over 1500 chars to their first/last lines.
 
         This mirrors Claude Code's HISTORY_SNIP which replaces old tool outputs
@@ -80,7 +148,16 @@ class ContextManager:
         """
         # 纯文本处理：超过 1500 字符的工具输出，截断为首尾各三行，中间省略
         changed = False
-        for m in messages:
+        # 最新几条消息通常包含当前报错或刚读取的代码，不能为了省 Token
+        # 立即截断。边界向前退，避免从 tool 消息中间切开调用对。
+        cutoff = max(0, len(messages) - preserve_recent)
+        if preserve_recent:
+            while cutoff > 0 and messages[cutoff].get("role") == "tool":
+                cutoff -= 1
+            candidates = messages[:cutoff]
+        else:
+            candidates = messages
+        for m in candidates:
             if m.get("role") != "tool":
                 continue
             content = m.get("content", "")
@@ -94,6 +171,28 @@ class ContextManager:
             m["content"] = snipped
             changed = True
         return changed
+
+    def stats(self) -> ContextStats:
+        by_layer = {layer.value: 0 for layer in CompressionLayer}
+        for event in self.events:
+            by_layer[event.layer.value] += 1
+        return ContextStats(
+            compression_count=len(self.events),
+            tokens_saved=sum(event.tokens_saved for event in self.events),
+            events_by_layer=by_layer,
+        )
+
+    def _record_event(
+        self,
+        layer: CompressionLayer,
+        tokens_before: int,
+        tokens_after: int,
+        messages_before: int,
+        messages_after: int,
+    ) -> None:
+        self.events.append(
+            CompressionEvent(layer, tokens_before, tokens_after, messages_before, messages_after)
+        )
 
     @staticmethod
     def _safe_split(messages: list[dict], keep_recent: int) -> int:
@@ -181,7 +280,11 @@ class ContextManager:
                         {"role": "user", "content": flat[:15000]},
                     ],
                 )
-                return resp.content
+                generated = resp.content.strip()
+                if not self.structured_memory:
+                    return generated
+                facts = self._extract_key_info(messages)
+                return f"{generated}\n\n[Structured working memory]\n{facts}"
             except Exception:
                 pass
 
@@ -205,13 +308,15 @@ class ContextManager:
         """Fallback: extract file paths, errors, and decisions without LLM."""
         # 压缩降级处理方案：不调大模型，0 token 成本
         # 「操作过的文件」和「出现过的错误」，生成一份极简摘要
-        import re
-
         files_seen = set()
         errors = []
+        tests = []
+        last_user_goal = ""
 
         for m in messages:
             text = m.get("content", "") or ""
+            if m.get("role") == "user" and text and not text.startswith("[Context compressed"):
+                last_user_goal = text.strip()[:300]
             # extract file paths
             # 粗略地把文件路径提取出来，作为文件操作摘要
             for match in re.finditer(r"[\w./\-]+\.\w{1,5}", text):
@@ -221,6 +326,9 @@ class ContextManager:
             for line in text.splitlines():
                 if "error" in line.lower():
                     errors.append(line.strip()[:150])
+                lowered = line.lower()
+                if "passed" in lowered or "failed" in lowered or "pytest" in lowered:
+                    tests.append(line.strip()[:150])
 
         parts = []
         # 拼接结果，文件最多 20 个，错误最多 5 个
@@ -228,4 +336,8 @@ class ContextManager:
             parts.append(f"Files touched: {', '.join(sorted(files_seen)[:20])}")
         if errors:
             parts.append(f"Errors seen: {'; '.join(errors[:5])}")
+        if tests:
+            parts.append(f"Test signals: {'; '.join(tests[-5:])}")
+        if last_user_goal:
+            parts.append(f"Latest user goal: {last_user_goal}")
         return "\n".join(parts) or "(no extractable context)"

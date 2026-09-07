@@ -1,0 +1,13 @@
+{
+  "id": "pagination-empty-page",
+  "task": "修复 service.py 的分页收集逻辑。分页是否结束只能由 next_token 判断，中间页即使 items 为空也可能还有下一页。只修改必要文件并运行测试。",
+  "workspace": "workspace",
+  "allowed_changed_files": ["service.py"],
+  "max_tool_calls": 14,
+  "max_fix_attempts": 2,
+  "tags": ["multi-file", "api", "pagination"],
+  "verification": {
+    "command": ["{python}", "-B", "-m", "pytest", "{case_dir}/hidden_tests/test_acceptance.py", "-q"],
+    "timeout": 20
+  }
+}

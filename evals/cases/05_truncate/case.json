@@ -1,0 +1,13 @@
+{
+  "id": "truncate-contract",
+  "task": "修复 text_utils.py 的 truncate：结果总长度不能超过limit；发生截断时以...结尾；无需截断时保持原文。运行可见测试。",
+  "workspace": "workspace",
+  "allowed_changed_files": ["text_utils.py"],
+  "max_tool_calls": 14,
+  "max_fix_attempts": 3,
+  "tags": ["contract", "regression"],
+  "verification": {
+    "command": ["{python}", "-B", "-m", "pytest", "{case_dir}/hidden_tests/test_acceptance.py", "-q"],
+    "timeout": 20
+  }
+}

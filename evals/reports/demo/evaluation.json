@@ -1,0 +1,45 @@
+{
+  "metadata": null,
+  "summary": {
+    "total_cases": 1,
+    "passed_cases": 1,
+    "success_rate": 1.0,
+    "hidden_test_pass_rate": 1.0,
+    "scope_compliance_rate": 1.0,
+    "average_tool_calls": 3.0,
+    "average_failed_test_runs": 0.0,
+    "average_duration_seconds": 1.246484799999962,
+    "total_prompt_tokens": 0,
+    "total_completion_tokens": 1,
+    "total_estimated_cost": null
+  },
+  "results": [
+    {
+      "case_id": "calculator-sign",
+      "success": true,
+      "failures": [],
+      "task_state": "completed",
+      "hidden_tests_passed": true,
+      "scope_compliant": true,
+      "tool_budget_compliant": true,
+      "changed_files": [
+        "calculator.py"
+      ],
+      "unexpected_files": [],
+      "tool_calls": 3,
+      "failed_test_runs": 0,
+      "duration_seconds": 1.246484799999962,
+      "prompt_tokens": 0,
+      "completion_tokens": 1,
+      "estimated_cost": null,
+      "verification": {
+        "passed": true,
+        "exit_code": 0,
+        "duration_seconds": 0.6176064999999653,
+        "output": ".                                                                        [100%]\n1 passed in 0.04s",
+        "timed_out": false
+      },
+      "agent_response": "修复完成，可见测试通过。"
+    }
+  ]
+}

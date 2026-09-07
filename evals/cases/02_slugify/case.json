@@ -1,0 +1,13 @@
+{
+  "id": "slugify-whitespace",
+  "task": "修复 slug.py 的 slugify：去掉首尾空白，把连续空白折叠为一个连字符，并转成小写。运行可见测试验证。",
+  "workspace": "workspace",
+  "allowed_changed_files": ["slug.py"],
+  "max_tool_calls": 12,
+  "max_fix_attempts": 2,
+  "tags": ["single-file", "edge-cases"],
+  "verification": {
+    "command": ["{python}", "-B", "-m", "pytest", "{case_dir}/hidden_tests/test_acceptance.py", "-q"],
+    "timeout": 20
+  }
+}

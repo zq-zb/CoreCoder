@@ -1,0 +1,13 @@
+{
+  "id": "ci-log-failure-classification",
+  "task": "修复 ci_logs.py：提取 ERROR、FAILED、TIMEOUT 三类失败行，匹配不区分大小写，保持原始顺序并限制最多返回 limit 条。只修改实现文件并运行测试。",
+  "workspace": "workspace",
+  "allowed_changed_files": ["ci_logs.py"],
+  "max_tool_calls": 12,
+  "max_fix_attempts": 2,
+  "tags": ["ci", "parsing", "context-budget"],
+  "verification": {
+    "command": ["{python}", "-B", "-m", "pytest", "{case_dir}/hidden_tests/test_acceptance.py", "-q"],
+    "timeout": 20
+  }
+}

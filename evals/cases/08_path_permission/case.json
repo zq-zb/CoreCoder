@@ -1,0 +1,13 @@
+{
+  "id": "path-permission-boundary",
+  "task": "修复 permissions.py 的工作区路径判断，不能让相同字符串前缀但不在目录内的路径通过。要求兼容相对路径解析并运行测试。",
+  "workspace": "workspace",
+  "allowed_changed_files": ["permissions.py"],
+  "max_tool_calls": 12,
+  "max_fix_attempts": 2,
+  "tags": ["security", "filesystem"],
+  "verification": {
+    "command": ["{python}", "-B", "-m", "pytest", "{case_dir}/hidden_tests/test_acceptance.py", "-q"],
+    "timeout": 20
+  }
+}

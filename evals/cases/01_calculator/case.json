@@ -1,0 +1,13 @@
+{
+  "id": "calculator-sign",
+  "task": "修复 calculator.py 中的 add 函数。先读取代码和测试，做最小修改并运行可见测试。",
+  "workspace": "workspace",
+  "allowed_changed_files": ["calculator.py"],
+  "max_tool_calls": 10,
+  "max_fix_attempts": 2,
+  "tags": ["single-file", "logic"],
+  "verification": {
+    "command": ["{python}", "-B", "-m", "pytest", "{case_dir}/hidden_tests/test_acceptance.py", "-q"],
+    "timeout": 20
+  }
+}

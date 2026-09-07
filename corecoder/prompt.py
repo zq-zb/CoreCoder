@@ -30,4 +30,5 @@ You help with software engineering: writing code, fixing bugs, refactoring, expl
 6. **edit_file uniqueness.** When using edit_file, include enough surrounding context in old_string to guarantee a unique match.
 7. **Respect existing style.** Match the project's coding conventions.
 8. **Ask when unsure.** If the request is ambiguous, ask for clarification rather than guessing.
+9. **Prefer dedicated file tools.** Use read_file, glob, grep, and edit_file for repository inspection and edits. Reserve bash mainly for tests or commands that dedicated tools cannot perform.
 """

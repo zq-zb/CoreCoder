@@ -1,0 +1,13 @@
+{
+  "id": "webhook-signature-validation",
+  "task": "修复 webhook.py：按 GitHub Webhook 约定验证 sha256=<hex> 签名，拒绝格式错误的输入，并使用恒定时间比较。只修改实现文件并运行测试。",
+  "workspace": "workspace",
+  "allowed_changed_files": ["webhook.py"],
+  "max_tool_calls": 12,
+  "max_fix_attempts": 2,
+  "tags": ["security", "webhook", "boundary"],
+  "verification": {
+    "command": ["{python}", "-B", "-m", "pytest", "{case_dir}/hidden_tests/test_acceptance.py", "-q"],
+    "timeout": 20
+  }
+}
