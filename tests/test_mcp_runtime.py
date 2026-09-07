@@ -244,7 +244,8 @@ def test_tool_execution_error_does_not_poison_healthy_connection():
     runtime = MCPRuntime()
     runtime.connect(sys.executable, [str(ERROR_SERVER_PATH)])
     try:
-        with pytest.raises(MCPToolExecutionError, match="fail_operation.*库存不足") as captured:
+        # MCP SDK 可以隐藏 Server 的内部异常细节，因此只依赖稳定的工具名错误契约。
+        with pytest.raises(MCPToolExecutionError, match="fail_operation") as captured:
             runtime.call_tool("fail_operation", {"reason": "库存不足"})
 
         assert captured.value.tool_name == "fail_operation"

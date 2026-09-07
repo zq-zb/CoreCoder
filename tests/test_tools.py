@@ -22,6 +22,12 @@ def test_all_tools_have_valid_schema():
         assert "required" in params
 
 
+def test_get_tool_returns_isolated_instances():
+    """不同任务不能共享 Bash 当前目录、文件变更等可变运行状态。"""
+
+    assert get_tool("bash") is not get_tool("bash")
+
+
 # --- bash ---
 
 def test_bash_basic():

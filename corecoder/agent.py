@@ -17,7 +17,7 @@ from .audit import AuditLogger
 from .context import ContextManager
 from .llm import LLM
 from .prompt import system_prompt
-from .tools import ALL_TOOLS
+from .tools import create_default_tools
 from .tools.agent import AgentTool
 from .tools.base import Tool
 
@@ -33,7 +33,7 @@ class Agent:
         audit_logger: AuditLogger | None = None,
     ):
         self.llm = llm
-        self.tools = tools if tools is not None else ALL_TOOLS
+        self.tools = tools if tools is not None else create_default_tools()
         self._tool_by_name = {t.name: t for t in self.tools}
         self.messages: list[dict] = []
         if context_strategy not in {"baseline", "structured-memory"}:

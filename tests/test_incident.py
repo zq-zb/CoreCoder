@@ -110,7 +110,7 @@ def test_ci_incident_runs_complete_repair_and_verification_loop(tmp_path):
         "    def test_add(self):\n        self.assertEqual(add(2, 3), 5)\n",
         encoding="utf-8",
     )
-    command = command_in_directory(tmp_path, [sys.executable, "-B", "-m", "unittest", test_file.name])
+    command = command_in_directory(tmp_path, [sys.executable, "-B", "-m", "pytest", test_file.name, "-q"])
     llm = ScriptedLLM(
         [
             LLMResponse(tool_calls=[ToolCall("read", "read_file", {"file_path": str(source_file)})]),

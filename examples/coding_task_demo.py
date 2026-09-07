@@ -24,7 +24,7 @@ def main() -> None:
         encoding="utf-8",
     )
     # -B 避免极快修改且文件大小不变时，下一个 Python 进程命中旧 .pyc。
-    test_command = command_in_directory(workspace, [sys.executable, "-B", "-m", "unittest", test_file.name])
+    test_command = command_in_directory(workspace, [sys.executable, "-B", "-m", "pytest", test_file.name, "-q"])
 
     script = [
         LLMResponse(content="先读取问题代码。", tool_calls=[ToolCall("1", "read_file", {"file_path": str(source)})]),

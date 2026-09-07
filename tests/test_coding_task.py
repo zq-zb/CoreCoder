@@ -10,7 +10,7 @@ from corecoder.tools import get_tool
 
 
 def _test_command(test_file) -> str:
-    return command_in_directory(test_file.parent, [sys.executable, "-B", "-m", "unittest", test_file.name])
+    return command_in_directory(test_file.parent, [sys.executable, "-B", "-m", "pytest", test_file.name, "-q"])
 
 
 def test_coding_task_repairs_failure_and_verifies_latest_edit(tmp_path):

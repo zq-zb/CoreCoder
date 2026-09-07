@@ -50,7 +50,7 @@ def main() -> int:
         "    def test_add(self):\n        self.assertEqual(add(2, 3), 5)\n",
         encoding="utf-8",
     )
-    command = command_in_directory(workspace, [sys.executable, "-B", "-m", "unittest", test_file.name])
+    command = command_in_directory(workspace, [sys.executable, "-B", "-m", "pytest", test_file.name, "-q"])
     scripted = ScriptedLLM(
         [
             LLMResponse(tool_calls=[ToolCall("read", "read_file", {"file_path": str(source)})]),

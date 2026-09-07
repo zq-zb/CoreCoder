@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from corecoder.shell_command import command_in_directory
@@ -7,12 +5,12 @@ from corecoder.shell_command import command_in_directory
 
 def test_command_in_directory_builds_windows_command() -> None:
     command = command_in_directory(
-        Path("C:/workspace with spaces"),
+        "C:/workspace with spaces",
         ["C:/Python/python.exe", "-m", "pytest", "test demo.py"],
         windows=True,
     )
 
-    assert command.startswith('cd /d "C:\\workspace with spaces" && ')
+    assert command.startswith('cd /d "C:/workspace with spaces" && ')
     assert '"test demo.py"' in command
 
 
