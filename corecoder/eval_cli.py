@@ -22,17 +22,22 @@ from .tools.edit import EditFileTool
 from .tools.glob_tool import GlobTool
 from .tools.grep import GrepTool
 from .tools.read import ReadFileTool
+from .tools.repository_search import RepositorySearchTool
 from .tools.write import WriteFileTool
 
 
-def _coding_tools():
+def _coding_tools(*, repository_retrieval: bool = True):
     """评测只提供完成编码任务必需的最小工具集。"""
 
     # 专用工具优先，避免模型把 Bash 当作文件浏览器消耗预算。
-    return [ReadFileTool(), EditFileTool(), WriteFileTool(), GlobTool(), GrepTool(), BashTool()]
+    tools = [ReadFileTool(), EditFileTool(), WriteFileTool(), GlobTool(), GrepTool()]
+    if repository_retrieval:
+        tools.append(RepositorySearchTool())
+    tools.append(BashTool())
+    return tools
 
 
-def _agent_factory(config: Config, strategy: str):
+def _agent_factory(config: Config, strategy: str, *, repository_retrieval: bool = True):
     def create(case: EvaluationCase, workspace: Path) -> Agent:
         llm_class = LiteLLM if config.provider == "litellm" else LLM
         llm = llm_class(
@@ -44,7 +49,7 @@ def _agent_factory(config: Config, strategy: str):
         )
         return Agent(
             llm=llm,
-            tools=_coding_tools(),
+            tools=_coding_tools(repository_retrieval=repository_retrieval),
             max_context_tokens=config.max_context_tokens,
             max_rounds=case.max_tool_calls,
             context_strategy=strategy,
@@ -70,6 +75,12 @@ def main(argv: list[str] | None = None) -> int:
         default="baseline",
         help="上下文策略：原始模型摘要或带确定性工作记忆的摘要",
     )
+    parser.add_argument(
+        "--retrieval",
+        choices=("on", "off"),
+        default="on",
+        help="是否向 Agent 提供仓库检索工具；用于同模型、同数据集 A/B 对比",
+    )
     options = parser.parse_args(argv)
     if options.repeat <= 0:
         parser.error("--repeat 必须大于 0")
@@ -85,6 +96,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"已加载 {len(cases)} 个评测案例：")
     for case in cases:
         print(f"- {case.case_id}: {case.task}")
+    print(f"仓库检索：{options.retrieval}")
     if not options.run:
         print("\n未传入 --run，本次不调用付费模型。")
         return 0
@@ -95,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     evaluator = CodingAgentEvaluator(
-        _agent_factory(config, options.strategy),
+        _agent_factory(config, options.strategy, repository_retrieval=options.retrieval == "on"),
         keep_workspaces=options.keep_workspaces,
     )
     results = []
@@ -109,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
         cases,
         model=config.model,
         provider=config.provider,
-        strategy=options.strategy,
+        strategy=f"{options.strategy}+retrieval-{options.retrieval}",
     )
     json_path, markdown_path = write_evaluation_report(results, summary, options.output, metadata)
     print(f"\n评测完成：{summary.passed_cases}/{summary.total_cases} ({summary.success_rate:.1%})")

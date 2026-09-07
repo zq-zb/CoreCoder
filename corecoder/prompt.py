@@ -8,6 +8,12 @@ def system_prompt(tools) -> str:
     cwd = os.getcwd()
     tool_list = "\n".join(f"- **{t.name}**: {t.description}" for t in tools)
     uname = platform.uname()
+    retrieval_rule = ""
+    if any(tool.name == "repository_search" for tool in tools):
+        retrieval_rule = (
+            "\n10. **Retrieve before broad reading.** When the relevant file is unknown, "
+            "use repository_search to rank likely files and snippets, then read only the strongest candidates."
+        )
 
     return f"""\
 You are CoreCoder, an AI coding assistant running in the user's terminal.
@@ -30,6 +36,5 @@ You help with software engineering: writing code, fixing bugs, refactoring, expl
 6. **edit_file uniqueness.** When using edit_file, include enough surrounding context in old_string to guarantee a unique match.
 7. **Respect existing style.** Match the project's coding conventions.
 8. **Ask when unsure.** If the request is ambiguous, ask for clarification rather than guessing.
-9. **Prefer dedicated file tools.** Use read_file, glob, grep, and edit_file for repository inspection and edits. Reserve bash mainly for tests or commands that dedicated tools cannot perform.
-10. **Retrieve before broad reading.** When the relevant file is unknown, use repository_search to rank likely files and snippets, then read only the strongest candidates.
+9. **Prefer dedicated file tools.** Use read_file, glob, grep, and edit_file for repository inspection and edits. Reserve bash mainly for tests or commands that dedicated tools cannot perform.{retrieval_rule}
 """

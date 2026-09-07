@@ -33,4 +33,12 @@ def test_evaluation_prefers_dedicated_file_tools_over_bash():
     names = [tool.name for tool in _coding_tools()]
 
     assert names[:2] == ["read_file", "edit_file"]
+    assert "repository_search" in names
+    assert names[-1] == "bash"
+
+
+def test_evaluation_can_disable_repository_retrieval_for_ab_comparison():
+    names = [tool.name for tool in _coding_tools(repository_retrieval=False)]
+
+    assert "repository_search" not in names
     assert names[-1] == "bash"
