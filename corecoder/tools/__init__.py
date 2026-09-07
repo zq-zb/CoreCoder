@@ -8,11 +8,13 @@ from .glob_tool import GlobTool
 from .grep import GrepTool
 from .now import NowTool
 from .read import ReadFileTool
+from .repository_search import RepositorySearchTool
 from .write import WriteFileTool
 
 ALL_TOOLS = [
     BashTool(),
     ReadFileTool(),
+    RepositorySearchTool(),
     WriteFileTool(),
     EditFileTool(),
     GlobTool(),

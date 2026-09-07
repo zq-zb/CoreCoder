@@ -32,7 +32,7 @@ def test_public_api_exports():
     assert MCPRuntimeState is not None
     assert MCPManager is not None
     assert MCPServerConfig is not None
-    assert len(ALL_TOOLS) == 9
+    assert len(ALL_TOOLS) == 10
 
 
 def test_config_from_env(monkeypatch):
