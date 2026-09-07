@@ -230,7 +230,9 @@ class CodingAgentEvaluator:
 
     def run_case(self, case: EvaluationCase) -> EvaluationResult:
         case.validate()
-        run_root = Path(tempfile.mkdtemp(prefix=f"corecoder-eval-{case.case_id}-"))
+        # Windows 的临时目录可能以 8.3 短路径返回，而后续工具会 resolve() 成长路径。
+        # 在边界处统一规范化，确保 Agent、工具和报告脱敏引用同一个工作区路径。
+        run_root = Path(tempfile.mkdtemp(prefix=f"corecoder-eval-{case.case_id}-")).resolve()
         workspace = run_root / "workspace"
         shutil.copytree(case.workspace_dir, workspace)
         before = _snapshot_files(workspace)
