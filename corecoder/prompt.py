@@ -12,8 +12,10 @@ def system_prompt(tools, *, repository_retrieval_policy: str = "available") -> s
     if repository_retrieval_policy == "guided":
         retrieval_rule = (
             "\n10. **Guided retrieval policy.** For repository work, repository_search must be the first "
-            "inspection tool. Search by the task's error, symbol, or behavior before bash, glob, grep, "
-            "read_file, edit_file, or write_file. The runtime enforces this ordering."
+            "inspection tool and must be called alone in the first tool round. Do not pair it with bash, "
+            "glob, grep, read_file, edit_file, or write_file. Search by the task's error, symbol, or behavior, "
+            "consume the ranked result, and only then call inspection or editing tools. The runtime enforces "
+            "this ordering."
         )
     elif any(tool.name == "repository_search" for tool in tools):
         retrieval_rule = (

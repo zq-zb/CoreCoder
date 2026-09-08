@@ -17,4 +17,6 @@ def test_guided_prompt_explains_enforced_tool_order() -> None:
     )
 
     assert "Guided retrieval policy" in prompt
+    assert "must be called alone in the first tool round" in prompt
+    assert "Do not pair it with" in prompt
     assert "runtime enforces" in prompt
