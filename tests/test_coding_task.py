@@ -155,6 +155,21 @@ def test_coding_evaluation_mode_requires_an_actual_change(tmp_path):
     assert report.failure_reason == "任务要求修改代码，但未检测到文件变更"
 
 
+def test_workspace_guards_preserve_guided_retrieval_prompt(tmp_path):
+    """安装安全守卫不能让提示层和 guided 执行策略失去同步。"""
+
+    agent = Agent(
+        ScriptedLLM([LLMResponse(content="unused")]),
+        tools=[get_tool("repository_search"), get_tool("read_file")],
+        repository_retrieval_policy="guided",
+    )
+
+    CodingTaskRunner(agent, tmp_path)
+
+    assert "Guided retrieval policy" in agent._system
+    assert "runtime enforces this ordering" in agent._system
+
+
 def test_state_machine_stops_after_modified_code_passes_test(tmp_path):
     """评测模式由状态机收敛，不要求模型再额外返回结束文本。"""
 

@@ -291,7 +291,12 @@ class CodingTaskRunner:
             guarded_tools.append(tool)
         self.agent.tools = guarded_tools
         self.agent._tool_by_name = {tool.name: tool for tool in guarded_tools}
-        self.agent._system = system_prompt(guarded_tools)
+        # 工具包装后需要刷新 Schema 描述，但不能丢失 Agent 已选择的检索策略。
+        # 否则提示层会退回 available，而执行层仍按 guided 拒绝首次读取。
+        self.agent._system = system_prompt(
+            guarded_tools,
+            repository_retrieval_policy=self.agent.repository_retrieval_policy,
+        )
 
 
 def _is_test_command(command: str) -> bool:
