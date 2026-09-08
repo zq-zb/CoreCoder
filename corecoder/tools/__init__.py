@@ -8,11 +8,13 @@ from .glob_tool import GlobTool
 from .grep import GrepTool
 from .now import NowTool
 from .read import ReadFileTool
+from .repository_search import RepositorySearchTool
 from .write import WriteFileTool
 
 ALL_TOOLS = [
     BashTool(),
     ReadFileTool(),
+    RepositorySearchTool(),
     WriteFileTool(),
     EditFileTool(),
     GlobTool(),
@@ -24,8 +26,14 @@ ALL_TOOLS = [
 
 
 def get_tool(name: str):
-    """Look up a tool by name."""
+    """按名称创建独立工具实例，避免 Agent 之间泄漏可变状态。"""
     for t in ALL_TOOLS:
         if t.name == name:
-            return t
+            return type(t)()
     return None
+
+
+def create_default_tools():
+    """为一个新 Agent 创建完整且相互隔离的默认工具集合。"""
+
+    return [type(tool)() for tool in ALL_TOOLS]

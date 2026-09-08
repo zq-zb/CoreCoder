@@ -1,0 +1,13 @@
+{
+  "id": "timeout-validation",
+  "task": "修复 config.py 的 parse_timeout：None 使用默认值30，字符串整数可解析，但0和负数必须抛出 ValueError。运行可见测试。",
+  "workspace": "workspace",
+  "allowed_changed_files": ["config.py"],
+  "max_tool_calls": 14,
+  "max_fix_attempts": 3,
+  "tags": ["validation", "error-handling"],
+  "verification": {
+    "command": ["{python}", "-B", "-m", "pytest", "{case_dir}/hidden_tests/test_acceptance.py", "-q"],
+    "timeout": 20
+  }
+}

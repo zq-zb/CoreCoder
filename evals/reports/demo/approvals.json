@@ -1,0 +1,13 @@
+[
+  {
+    "request_id": "e2a993fdb4144926bd1e9d1d8354db49",
+    "command_sha256": "16f880284c51ff513ff5465f0082c75d9c7ebb186e65e98b4fa362534044846a",
+    "reason": "推送会改变远端仓库",
+    "status": "consumed",
+    "created_at": 1788696407.0647726,
+    "expires_at": 1788696707.0647726,
+    "approver": "demo-reviewer",
+    "approved_at": 1788696407.068773,
+    "consumed_at": 1788696407.070773
+  }
+]

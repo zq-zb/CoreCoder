@@ -1,0 +1,44 @@
+{
+  "experiment": "guided-policy-consistency",
+  "model": "deepseek-v4-flash",
+  "case_id": "access-policy-call-chain",
+  "runs_per_variant": 1,
+  "variants": [
+    {
+      "name": "initial-guided",
+      "prompt_tokens": 30714,
+      "tool_calls": 16,
+      "policy_rejections": 1,
+      "duration_seconds": 18.7641,
+      "success": true,
+      "hidden_tests_passed": true,
+      "target_recall": 1.0,
+      "context_recall": 0.75
+    },
+    {
+      "name": "policy-propagation-fixed",
+      "prompt_tokens": 26536,
+      "tool_calls": 16,
+      "policy_rejections": 2,
+      "duration_seconds": 16.9382,
+      "success": true,
+      "hidden_tests_passed": true,
+      "target_recall": 1.0,
+      "context_recall": 0.75
+    },
+    {
+      "name": "search-alone-prompt",
+      "prompt_tokens": 23186,
+      "tool_calls": 14,
+      "policy_rejections": 0,
+      "duration_seconds": 15.8551,
+      "success": true,
+      "hidden_tests_passed": true,
+      "target_recall": 1.0,
+      "context_recall": 0.75
+    }
+  ],
+  "initial_to_final_prompt_token_delta": -7528,
+  "initial_to_final_prompt_token_rate": -0.2451,
+  "warning": "Each variant has one paid run; results demonstrate the path and provide a directional signal, not statistical significance."
+}

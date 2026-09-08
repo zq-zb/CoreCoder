@@ -1,0 +1,154 @@
+from corecoder.repository import RepositoryIndex, repository_fingerprint
+from corecoder.tools import get_tool
+
+
+def test_repository_search_ranks_path_and_symbol_matches(tmp_path) -> None:
+    (tmp_path / "payments").mkdir()
+    (tmp_path / "payments" / "retry_policy.py").write_text(
+        "def calculate_backoff(attempt):\n    return attempt * 2\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "notes.md").write_text(
+        "The retry policy should use exponential backoff.\n",
+        encoding="utf-8",
+    )
+
+    hits = RepositoryIndex.build(tmp_path).search("calculate_backoff retry policy")
+
+    assert hits[0].path == "payments/retry_policy.py"
+    assert "符号命中:calculate_backoff" in hits[0].reasons
+    assert "def calculate_backoff" in hits[0].snippet
+
+
+def test_repository_index_skips_generated_and_large_files(tmp_path) -> None:
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git" / "secret.py").write_text("def hidden(): pass", encoding="utf-8")
+    (tmp_path / "binary.bin").write_bytes(b"retry policy")
+    (tmp_path / "large.py").write_text("x" * 100, encoding="utf-8")
+    (tmp_path / "app.py").write_text("def retry_request(): pass", encoding="utf-8")
+
+    index = RepositoryIndex.build(tmp_path, max_file_bytes=50)
+
+    assert [document.relative_path for document in index.documents] == ["app.py"]
+
+
+def test_repository_search_tool_returns_bounded_explainable_context(tmp_path) -> None:
+    (tmp_path / "auth.py").write_text(
+        "def verify_webhook_signature(payload, signature):\n    return False\n",
+        encoding="utf-8",
+    )
+    tool = get_tool("repository_search")
+
+    result = tool.execute("verify_webhook_signature", str(tmp_path), limit=50)
+
+    assert "Repository context:" in result
+    assert "auth.py:1" in result
+    assert "符号命中:verify_webhook_signature" in result
+    assert len(result) <= 15_030
+    stats = tool.stats()
+    assert stats.calls == 1
+    assert stats.returned_results == 1
+    assert stats.context_characters == len(result)
+    assert stats.duration_seconds > 0
+    assert stats.returned_paths == ("auth.py",)
+    assert stats.cache_hits == 0
+    assert stats.index_builds == 1
+    assert stats.cache_invalidations == 0
+    assert stats.incremental_refreshes == 0
+
+
+def test_repository_search_handles_empty_and_missing_inputs(tmp_path) -> None:
+    tool = get_tool("repository_search")
+
+    assert tool.execute("  ", str(tmp_path)) == "Error: query cannot be empty"
+    assert tool.execute("anything", str(tmp_path / "missing")).startswith("Error:")
+
+
+def test_repository_search_returns_no_match_without_dumping_repository(tmp_path) -> None:
+    (tmp_path / "app.py").write_text("def start(): pass", encoding="utf-8")
+
+    result = get_tool("repository_search").execute("nonexistent_symbol", str(tmp_path))
+
+    assert result == "No relevant repository context found."
+
+
+def test_repository_search_expands_one_hop_along_import_graph(tmp_path) -> None:
+    (tmp_path / "checkout.py").write_text(
+        "from pricing import apply_discount\n\ndef order_total(): pass\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "pricing.py").write_text("def apply_discount(): pass\n", encoding="utf-8")
+    (tmp_path / "checkout_legacy.py").write_text("def old_order_total(): pass\n", encoding="utf-8")
+
+    hits = RepositoryIndex.build(tmp_path).search("checkout order total", limit=3)
+    pricing = next(hit for hit in hits if hit.path == "pricing.py")
+
+    assert any(reason.startswith("依赖链:checkout.py") for reason in pricing.reasons)
+
+
+def test_repository_search_keeps_tests_but_prioritizes_direct_implementation(tmp_path) -> None:
+    (tmp_path / "gateway.py").write_text(
+        "from access_policy import can_access\n\ndef authorize(): return can_access()\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "access_policy.py").write_text("def can_access(): return False\n", encoding="utf-8")
+    (tmp_path / "test_gateway.py").write_text("from gateway import authorize\n", encoding="utf-8")
+
+    ranked = [hit.path for hit in RepositoryIndex.build(tmp_path).search("gateway authorize", limit=3)]
+
+    assert ranked == ["gateway.py", "access_policy.py", "test_gateway.py"]
+
+
+def test_repository_search_reuses_unchanged_index(tmp_path) -> None:
+    (tmp_path / "service.py").write_text("def health_check(): return True\n", encoding="utf-8")
+    tool = get_tool("repository_search")
+
+    first = tool.execute("health_check", str(tmp_path))
+    second = tool.execute("health_check", str(tmp_path))
+
+    assert first == second
+    stats = tool.stats()
+    assert stats.calls == 2
+    assert stats.index_builds == 1
+    assert stats.cache_hits == 1
+    assert stats.cache_invalidations == 0
+
+
+def test_repository_search_invalidates_cache_after_file_change(tmp_path) -> None:
+    source = tmp_path / "service.py"
+    source.write_text("def old_health_check(): return False\n", encoding="utf-8")
+    tool = get_tool("repository_search")
+    assert "service.py" in tool.execute("old_health_check", str(tmp_path))
+
+    source.write_text("def new_health_check(): return True\n", encoding="utf-8")
+    result = tool.execute("new_health_check", str(tmp_path))
+
+    assert "service.py" in result
+    assert "new_health_check" in result
+    stats = tool.stats()
+    assert stats.index_builds == 1
+    assert stats.cache_hits == 0
+    assert stats.cache_invalidations == 1
+    assert stats.incremental_refreshes == 1
+
+
+def test_repository_refresh_handles_changed_added_and_deleted_files(tmp_path) -> None:
+    stable = tmp_path / "stable.py"
+    changed = tmp_path / "changed.py"
+    removed = tmp_path / "removed.py"
+    stable.write_text("def stable_symbol(): pass\n", encoding="utf-8")
+    changed.write_text("def old_symbol(): pass\n", encoding="utf-8")
+    removed.write_text("def removed_symbol(): pass\n", encoding="utf-8")
+    before = repository_fingerprint(tmp_path)
+    index = RepositoryIndex.build(tmp_path)
+    stable_document = next(document for document in index.documents if document.relative_path == "stable.py")
+
+    changed.write_text("def new_symbol_with_longer_name(): pass\n", encoding="utf-8")
+    removed.unlink()
+    (tmp_path / "added.py").write_text("def added_symbol(): pass\n", encoding="utf-8")
+    refreshed = index.refresh(before, repository_fingerprint(tmp_path))
+
+    assert next(document for document in refreshed.documents if document.relative_path == "stable.py") is stable_document
+    assert refreshed.search("new_symbol_with_longer_name")[0].path == "changed.py"
+    assert refreshed.search("added_symbol")[0].path == "added.py"
+    assert not refreshed.search("removed_symbol")

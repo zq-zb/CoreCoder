@@ -11,6 +11,8 @@ import os
 import re
 import subprocess
 import threading
+from pathlib import Path
+from typing import Protocol
 
 from .base import Tool
 
@@ -18,6 +20,10 @@ from .base import Tool
 # when the agent executes tools in parallel two bash calls never race on one
 # shared global: each worker thread carries its own cwd. See article 05.
 _local = threading.local()
+
+
+class CommandExecutor(Protocol):
+    def execute(self, command: str, *, timeout: int, cwd: str | Path) -> str: ...
 
 # patterns that could wreck the filesystem or leak secrets
 # 危险命令模式，可能破坏文件系统或泄露敏感信息
@@ -59,6 +65,12 @@ class BashTool(Tool):
         "required": ["command"],
     }
 
+    def __init__(self, executor: CommandExecutor | None = None) -> None:
+        self.executor = executor
+        # 每个 Agent 的 Bash 实例拥有独立目录状态；线程局部性只解决并发竞争，
+        # 实例隔离还可避免一个任务退出后把临时目录泄漏给另一个任务。
+        self._local = threading.local()
+
     def execute(self, command: str, timeout: int = 120) -> str:
         # safety check 安全检查，拦截危险命令
         warning = _check_dangerous(command)
@@ -66,7 +78,10 @@ class BashTool(Tool):
             return f"⚠ Blocked: {warning}\nCommand: {command}\nIf intentional, modify the command to be more specific."
 
         # use this thread's own tracked working directory
-        cwd = getattr(_local, "cwd", None) or os.getcwd()
+        cwd = getattr(self._local, "cwd", None) or os.getcwd()
+
+        if self.executor is not None:
+            return self.executor.execute(command, timeout=timeout, cwd=cwd)
 
         try:
             proc = subprocess.run(
@@ -83,7 +98,7 @@ class BashTool(Tool):
 
             # track cd commands so next command runs in the right place
             if proc.returncode == 0:
-                _update_cwd(command, cwd)
+                _update_cwd(command, cwd, self._local)
             out = proc.stdout
             if proc.stderr:
                 out += f"\n[stderr]\n{proc.stderr}"
@@ -111,11 +126,12 @@ def _check_dangerous(cmd: str) -> str | None:
     return None
 
 
-def _update_cwd(command: str, current_cwd: str):
+def _update_cwd(command: str, current_cwd: str, local_state=None):
     """Track directory changes from cd commands, per thread."""
     # walk each cd in a && chain, resolving relative targets against the dir the
     # previous cd landed in (not the original cwd) so `cd a && cd b` ends in a/b
     # 如果有多个 cd 命令，则按顺序执行，确保每个 cd 的目标目录是上一个 cd 的结果
+    state = _local if local_state is None else local_state
     running = current_cwd
     changed = False
     for part in command.split("&&"):
@@ -128,4 +144,4 @@ def _update_cwd(command: str, current_cwd: str):
                     running = new_dir
                     changed = True
     if changed:
-        _local.cwd = running
+        state.cwd = running

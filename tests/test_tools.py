@@ -7,7 +7,7 @@ from corecoder.tools import ALL_TOOLS, get_tool
 
 
 def test_tool_count():
-    assert len(ALL_TOOLS) == 9
+    assert len(ALL_TOOLS) == 10
 
 
 def test_all_tools_have_valid_schema():
@@ -20,6 +20,17 @@ def test_all_tools_have_valid_schema():
         assert params["type"] == "object"
         assert "properties" in params
         assert "required" in params
+
+
+def test_get_tool_returns_isolated_instances():
+    """不同任务不能共享 Bash 当前目录、文件变更等可变运行状态。"""
+
+    first = get_tool("bash")
+    second = get_tool("bash")
+
+    assert first is not second
+    first._local.cwd = "/temporary/task-a"
+    assert getattr(second._local, "cwd", None) is None
 
 
 # --- bash ---

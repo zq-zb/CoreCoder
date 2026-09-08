@@ -1,0 +1,63 @@
+{
+  "summary": {
+    "cases": 2,
+    "average_target_recall_at_1": 0.5,
+    "average_target_recall_at_3": 1.0,
+    "average_target_recall_at_5": 1.0,
+    "average_context_recall_at_1": 0.3333333333333333,
+    "average_context_recall_at_3": 1.0,
+    "average_context_recall_at_5": 1.0,
+    "mean_reciprocal_rank": 1.0,
+    "average_duration_seconds": 0.00498640000114392
+  },
+  "results": [
+    {
+      "case_id": "discount-call-chain",
+      "indexed_files": 8,
+      "relevant_files": [
+        "checkout.py",
+        "pricing.py",
+        "test_checkout.py"
+      ],
+      "ranked_files": [
+        "checkout.py",
+        "test_checkout.py",
+        "pricing.py",
+        "checkout_legacy.py",
+        "checkout_validator.py"
+      ],
+      "target_recall_at_1": 0.0,
+      "target_recall_at_3": 1.0,
+      "target_recall_at_5": 1.0,
+      "context_recall_at_1": 0.3333333333333333,
+      "context_recall_at_3": 1.0,
+      "context_recall_at_5": 1.0,
+      "first_relevant_rank": 1,
+      "duration_seconds": 0.005458900002849987
+    },
+    {
+      "case_id": "pagination-empty-page",
+      "indexed_files": 8,
+      "relevant_files": [
+        "api_client.py",
+        "service.py",
+        "test_service.py"
+      ],
+      "ranked_files": [
+        "service.py",
+        "api_client.py",
+        "test_service.py",
+        "page_serializer.py",
+        "pagination_metrics.py"
+      ],
+      "target_recall_at_1": 1.0,
+      "target_recall_at_3": 1.0,
+      "target_recall_at_5": 1.0,
+      "context_recall_at_1": 0.3333333333333333,
+      "context_recall_at_3": 1.0,
+      "context_recall_at_5": 1.0,
+      "first_relevant_rank": 1,
+      "duration_seconds": 0.004513899999437854
+    }
+  ]
+}

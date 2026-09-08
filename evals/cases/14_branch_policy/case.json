@@ -1,0 +1,13 @@
+{
+  "id": "protected-branch-normalization",
+  "task": "修复 branch_policy.py：判断分支是否允许自动写入时，需要规范化空白和 refs/heads/ 前缀，并禁止 main、master、release 三个受保护分支（不区分大小写）。只修改实现文件并运行测试。",
+  "workspace": "workspace",
+  "allowed_changed_files": ["branch_policy.py"],
+  "max_tool_calls": 12,
+  "max_fix_attempts": 2,
+  "tags": ["security", "git", "policy"],
+  "verification": {
+    "command": ["{python}", "-B", "-m", "pytest", "{case_dir}/hidden_tests/test_acceptance.py", "-q"],
+    "timeout": 20
+  }
+}

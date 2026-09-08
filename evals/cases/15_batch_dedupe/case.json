@@ -1,0 +1,13 @@
+{
+  "id": "batch-deduplication-order",
+  "task": "修复 batch.py：批量去重必须保留第一次出现的顺序，并同时支持不可哈希的字典任务。不得修改输入列表。只修改实现文件并运行测试。",
+  "workspace": "workspace",
+  "allowed_changed_files": ["batch.py"],
+  "max_tool_calls": 14,
+  "max_fix_attempts": 2,
+  "tags": ["batch", "idempotency", "data-integrity"],
+  "verification": {
+    "command": ["{python}", "-B", "-m", "pytest", "{case_dir}/hidden_tests/test_acceptance.py", "-q"],
+    "timeout": 20
+  }
+}

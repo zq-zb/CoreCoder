@@ -48,6 +48,8 @@ class AgentTool(Tool):
             tools=[t for t in parent.tools if t.name != "agent"],  # no recursive agents
             max_context_tokens=parent.context.max_tokens,
             max_rounds=20,
+            context_strategy=parent.context_strategy,
+            audit_logger=parent.audit_logger,
         )
 
         try:

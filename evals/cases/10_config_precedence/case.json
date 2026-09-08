@@ -1,0 +1,13 @@
+{
+  "id": "config-precedence",
+  "task": "修复 config_merge.py：配置优先级必须是环境变量 > 文件配置 > 默认值，并忽略值为 None 的覆盖项。只修改实现文件并运行测试。",
+  "workspace": "workspace",
+  "allowed_changed_files": ["config_merge.py"],
+  "max_tool_calls": 12,
+  "max_fix_attempts": 2,
+  "tags": ["configuration", "multi-source"],
+  "verification": {
+    "command": ["{python}", "-B", "-m", "pytest", "{case_dir}/hidden_tests/test_acceptance.py", "-q"],
+    "timeout": 20
+  }
+}

@@ -1,8 +1,20 @@
 """Tests for core modules: config, context, session, imports."""
 
-from corecoder import ALL_TOOLS, LLM, Agent, Config, __version__
+from corecoder import (
+    ALL_TOOLS,
+    LLM,
+    Agent,
+    Config,
+    MCPManager,
+    MCPRuntime,
+    MCPRuntimeState,
+    MCPServerConfig,
+    __version__,
+)
 from corecoder import session as session_module
-from corecoder.context import ContextManager, estimate_tokens
+from corecoder.config import parse_config
+from corecoder.context import CompressionLayer, ContextManager, estimate_tokens
+from corecoder.llm import LLMResponse, ScriptedLLM, ToolCall
 from corecoder.session import list_sessions, load_session, save_session
 from corecoder.tools import get_tool
 
@@ -16,7 +28,11 @@ def test_public_api_exports():
     assert Agent is not None
     assert LLM is not None
     assert Config is not None
-    assert len(ALL_TOOLS) == 9
+    assert MCPRuntime is not None
+    assert MCPRuntimeState is not None
+    assert MCPManager is not None
+    assert MCPServerConfig is not None
+    assert len(ALL_TOOLS) == 10
 
 
 def test_config_from_env(monkeypatch):
@@ -25,12 +41,9 @@ def test_config_from_env(monkeypatch):
     assert c.model == "test-model"
 
 
-def test_config_defaults(monkeypatch):
-    # clear relevant env vars without leaking the change into other tests
-    monkeypatch.delenv("CORECODER_MODEL", raising=False)
-    monkeypatch.delenv("CORECODER_MAX_TOKENS", raising=False)
-
-    c = Config.from_env()
+def test_config_defaults():
+    # 显式传入空环境，避免开发者本地 .env 改变默认值测试结果。
+    c = parse_config(env={})
     assert c.model == "gpt-5.5"
     assert c.max_tokens == 4096
     assert c.temperature == 0.0
@@ -54,6 +67,157 @@ def test_context_snip():
     ctx._snip_tool_outputs(msgs)
     after = estimate_tokens(msgs)
     assert after < before
+
+
+def test_context_snip_preserves_recent_tool_output():
+    ctx = ContextManager(max_tokens=3000)
+    old_output = "old\n" * 1000
+    recent_output = "recent\n" * 1000
+    messages = [
+        {"role": "tool", "tool_call_id": "old", "content": old_output},
+        {"role": "user", "content": "继续处理"},
+        {"role": "assistant", "tool_calls": [{"id": "new"}]},
+        {"role": "tool", "tool_call_id": "new", "content": recent_output},
+    ]
+
+    ctx._snip_tool_outputs(messages, preserve_recent=3)
+
+    assert messages[0]["content"] != old_output
+    assert messages[-1]["content"] == recent_output
+
+
+def test_context_records_compression_metrics():
+    ctx = ContextManager(max_tokens=1000)
+    messages = [{"role": "user", "content": "请检查日志"}]
+    for i in range(10):
+        messages.extend([
+            {"role": "assistant", "tool_calls": [{"id": f"t{i}"}]},
+            {"role": "tool", "tool_call_id": f"t{i}", "content": "line\n" * 500},
+        ])
+
+    assert ctx.maybe_compress(messages, None) is True
+    stats = ctx.stats()
+
+    assert stats.compression_count >= 1
+    assert stats.tokens_saved > 0
+    assert stats.events_by_layer[CompressionLayer.TOOL_SNIP.value] == 1
+
+
+def test_llm_summary_keeps_deterministic_working_memory():
+    ctx = ContextManager(max_tokens=1000)
+    llm = ScriptedLLM([LLMResponse(content="模型摘要")])
+    messages = [
+        {"role": "user", "content": "请修复 src/payment.py 并确保 pytest 通过"},
+        {"role": "tool", "tool_call_id": "t1", "content": "Error: timeout"},
+    ]
+
+    summary = ctx._get_summary(messages, llm)
+
+    assert "模型摘要" in summary
+    assert "src/payment.py" in summary
+    assert "Error: timeout" in summary
+    assert "Latest user goal" in summary
+
+
+def test_baseline_summary_does_not_append_structured_memory():
+    ctx = ContextManager(max_tokens=1000, structured_memory=False)
+    llm = ScriptedLLM([LLMResponse(content="仅保留模型摘要")])
+
+    summary = ctx._get_summary([{"role": "user", "content": "修复 src/a.py"}], llm)
+
+    assert summary == "仅保留模型摘要"
+
+
+def test_agent_rejects_unknown_context_strategy():
+    llm = ScriptedLLM([LLMResponse(content="unused")])
+
+    try:
+        Agent(llm, context_strategy="unknown")
+    except ValueError as error:
+        assert "未知上下文策略" in str(error)
+    else:
+        raise AssertionError("未知上下文策略必须被拒绝")
+
+
+def test_agent_rejects_guided_retrieval_without_search_tool():
+    llm = ScriptedLLM([LLMResponse(content="unused")])
+
+    try:
+        Agent(llm, tools=[get_tool("read_file")], repository_retrieval_policy="guided")
+    except ValueError as error:
+        assert "要求提供 repository_search" in str(error)
+    else:
+        raise AssertionError("guided 模式缺少检索工具时必须失败")
+
+
+def test_guided_retrieval_rejects_broad_read_then_allows_search(tmp_path):
+    source = tmp_path / "service.py"
+    source.write_text("def target_symbol(): return True\n", encoding="utf-8")
+    llm = ScriptedLLM([
+        LLMResponse(tool_calls=[ToolCall("read", "read_file", {"file_path": str(source)})]),
+        LLMResponse(tool_calls=[ToolCall(
+            "search", "repository_search", {"query": "target_symbol", "path": str(tmp_path)}
+        )]),
+        LLMResponse(tool_calls=[ToolCall("read2", "read_file", {"file_path": str(source)})]),
+        LLMResponse(content="完成"),
+    ])
+    agent = Agent(
+        llm,
+        tools=[get_tool("repository_search"), get_tool("read_file")],
+        repository_retrieval_policy="guided",
+    )
+    executed: list[str] = []
+
+    assert agent.chat("定位目标", on_tool=lambda name, arguments: executed.append(name)) == "完成"
+    replies = [message["content"] for message in agent.messages if message.get("role") == "tool"]
+    assert replies[0].startswith("Policy: guided repository retrieval")
+    assert "Repository context" in replies[1]
+    assert "target_symbol" in replies[2]
+    assert executed == ["repository_search", "read_file"]
+    assert agent.retrieval_policy_rejections == 1
+    assert [record.selected_tools for record in agent.llm_rounds] == [
+        ("read_file",),
+        ("repository_search",),
+        ("read_file",),
+        (),
+    ]
+    assert agent.llm_rounds[0].rejected_tool_calls == 1
+    assert all(record.duration_seconds >= 0 for record in agent.llm_rounds)
+
+
+def test_guided_retrieval_rejects_search_parallel_with_read(tmp_path):
+    source = tmp_path / "service.py"
+    source.write_text("def target_symbol(): return True\n", encoding="utf-8")
+    llm = ScriptedLLM([
+        LLMResponse(tool_calls=[
+            ToolCall("search", "repository_search", {"query": "target_symbol", "path": str(tmp_path)}),
+            ToolCall("read", "read_file", {"file_path": str(source)}),
+        ]),
+        LLMResponse(content="已收到策略提示"),
+    ])
+    agent = Agent(
+        llm,
+        tools=[get_tool("repository_search"), get_tool("read_file")],
+        repository_retrieval_policy="guided",
+    )
+
+    assert agent.chat("定位目标") == "已收到策略提示"
+    replies = [message["content"] for message in agent.messages if message.get("role") == "tool"]
+    assert len(replies) == 2
+    assert all("run repository_search alone" in reply for reply in replies)
+    assert agent.retrieval_policy_rejections == 2
+
+
+def test_llm_round_numbers_continue_across_chat_calls():
+    agent = Agent(
+        ScriptedLLM([LLMResponse(content="第一条"), LLMResponse(content="第二条")]),
+        tools=[],
+    )
+
+    assert agent.chat("一") == "第一条"
+    assert agent.chat("二") == "第二条"
+
+    assert [record.round_index for record in agent.llm_rounds] == [1, 2]
 
 
 def test_context_compress():
@@ -231,3 +395,19 @@ def test_interrupt_backfills_missing_tool_replies():
     ids = [m["tool_call_id"] for m in replies]
     assert sorted(ids) == ["a", "b"]
     assert ids.count("a") == 1  # the already-answered call wasn't duplicated
+
+
+def test_agent_recovers_from_one_empty_model_response():
+    """Provider 偶发空响应时应请求模型继续，而不是把空内容当作完成。"""
+
+    llm = ScriptedLLM([LLMResponse(), LLMResponse(content="已完成并验证。")])
+    agent = Agent(llm, tools=[], max_rounds=3)
+
+    assert agent.chat("修复问题") == "已完成并验证。"
+    assert any("上一轮返回了空响应" in message.get("content", "") for message in agent.messages)
+
+
+def test_agent_stops_after_two_empty_model_responses():
+    agent = Agent(ScriptedLLM([LLMResponse(), LLMResponse()]), tools=[], max_rounds=3)
+
+    assert agent.chat("修复问题") == "(model returned empty response twice)"

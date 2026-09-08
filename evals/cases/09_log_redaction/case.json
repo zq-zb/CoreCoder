@@ -1,0 +1,13 @@
+{
+  "id": "log-secret-redaction",
+  "task": "完善 redaction.py：对 api_key、token、password、authorization 的 key=value 内容进行大小写不敏感脱敏，不影响普通字段。运行可见测试。",
+  "workspace": "workspace",
+  "allowed_changed_files": ["redaction.py"],
+  "max_tool_calls": 12,
+  "max_fix_attempts": 2,
+  "tags": ["security", "logging"],
+  "verification": {
+    "command": ["{python}", "-B", "-m", "pytest", "{case_dir}/hidden_tests/test_acceptance.py", "-q"],
+    "timeout": 20
+  }
+}

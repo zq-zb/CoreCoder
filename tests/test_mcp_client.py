@@ -89,6 +89,20 @@ def test_persistent_client_lists_tools_on_existing_connection():
     assert asyncio.run(run_scenario()) == {"add", "greet"}
 
 
+def test_discovered_tools_preserve_standard_mcp_safety_annotations():
+    """重试决策所需的标准 ToolAnnotations 不应在适配时丢失。"""
+
+    async def run_scenario():
+        async with PersistentMCPClient(sys.executable, [str(SERVER_PATH)]) as client:
+            return {tool.name: tool for tool in await client.list_tools()}
+
+    tools = asyncio.run(run_scenario())
+
+    assert tools["add"].read_only_hint is True
+    assert tools["add"].idempotent_hint is True
+    assert tools["add"].retry_safe is True
+
+
 def test_persistent_client_reuses_connection_for_multiple_calls():
     """同一上下文中的多次工具调用应复用一个 MCP Client。"""
 

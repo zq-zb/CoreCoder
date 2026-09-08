@@ -1,0 +1,13 @@
+{
+  "id": "lease-expiry-boundary",
+  "task": "修复 lease.py：租约在当前时间等于 expires_at 时也必须视为过期，同时保持尚未到期时为有效。只修改实现文件并运行测试。",
+  "workspace": "workspace",
+  "allowed_changed_files": ["lease.py"],
+  "max_tool_calls": 10,
+  "max_fix_attempts": 2,
+  "tags": ["reliability", "lease", "boundary"],
+  "verification": {
+    "command": ["{python}", "-B", "-m", "pytest", "{case_dir}/hidden_tests/test_acceptance.py", "-q"],
+    "timeout": 20
+  }
+}
