@@ -12,6 +12,7 @@ which means it's done working and ready to report back.
 import concurrent.futures
 import inspect
 import time
+from dataclasses import dataclass
 
 from .audit import AuditLogger
 from .context import ContextManager
@@ -20,6 +21,18 @@ from .prompt import system_prompt
 from .tools import create_default_tools
 from .tools.agent import AgentTool
 from .tools.base import Tool
+
+
+@dataclass
+class LLMRoundRecord:
+    """一次模型往返的成本、决策与策略拒绝记录。"""
+
+    round_index: int
+    prompt_tokens: int
+    completion_tokens: int
+    duration_seconds: float
+    selected_tools: tuple[str, ...]
+    rejected_tool_calls: int = 0
 
 
 class Agent:
@@ -46,6 +59,7 @@ class Agent:
             raise ValueError("guided 检索策略要求提供 repository_search 工具")
         self.repository_retrieval_policy = repository_retrieval_policy
         self.retrieval_policy_rejections = 0
+        self.llm_rounds: list[LLMRoundRecord] = []
         self.context = ContextManager(
             max_tokens=max_context_tokens,
             structured_memory=context_strategy == "structured-memory",
@@ -75,11 +89,20 @@ class Agent:
         retrieval_satisfied = self.repository_retrieval_policy != "guided"
         for _ in range(self.max_rounds):
             # 对话历史 + 工具信息 -> LLM -> 可能的工具调用
+            llm_started = time.perf_counter()
             resp = self.llm.chat(
                 messages=self._full_messages(),
                 tools=self._tool_schemas(),
                 on_token=on_token,
             )
+            round_record = LLMRoundRecord(
+                round_index=len(self.llm_rounds) + 1,
+                prompt_tokens=resp.prompt_tokens,
+                completion_tokens=resp.completion_tokens,
+                duration_seconds=time.perf_counter() - llm_started,
+                selected_tools=tuple(call.name for call in resp.tool_calls),
+            )
+            self.llm_rounds.append(round_record)
 
             # no tool calls -> LLM is done, return text
             if not resp.tool_calls: # 没有工具调用、LLM 已完成，结束任务
@@ -112,6 +135,7 @@ class Agent:
                 if has_search and has_parallel_inspection:
                     # 首次检索不能与读取/修改并行，否则后者并没有消费检索结果。
                     self.retrieval_policy_rejections += len(resp.tool_calls)
+                    round_record.rejected_tool_calls = len(resp.tool_calls)
                     for tc in resp.tool_calls:
                         result = (
                             "Policy: run repository_search alone as the first repository operation; "
@@ -125,6 +149,7 @@ class Agent:
                     # 提示词是软约束，部分模型仍会先广泛读取。guided 模式在执行层
                     # 拒绝第一次旁路检查，让实验能确定性地真正使用检索能力。
                     self.retrieval_policy_rejections += len(resp.tool_calls)
+                    round_record.rejected_tool_calls = len(resp.tool_calls)
                     for tc in resp.tool_calls:
                         result = (
                             "Policy: guided repository retrieval requires repository_search before "

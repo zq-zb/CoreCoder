@@ -175,6 +175,14 @@ def test_guided_retrieval_rejects_broad_read_then_allows_search(tmp_path):
     assert "target_symbol" in replies[2]
     assert executed == ["repository_search", "read_file"]
     assert agent.retrieval_policy_rejections == 1
+    assert [record.selected_tools for record in agent.llm_rounds] == [
+        ("read_file",),
+        ("repository_search",),
+        ("read_file",),
+        (),
+    ]
+    assert agent.llm_rounds[0].rejected_tool_calls == 1
+    assert all(record.duration_seconds >= 0 for record in agent.llm_rounds)
 
 
 def test_guided_retrieval_rejects_search_parallel_with_read(tmp_path):
@@ -198,6 +206,18 @@ def test_guided_retrieval_rejects_search_parallel_with_read(tmp_path):
     assert len(replies) == 2
     assert all("run repository_search alone" in reply for reply in replies)
     assert agent.retrieval_policy_rejections == 2
+
+
+def test_llm_round_numbers_continue_across_chat_calls():
+    agent = Agent(
+        ScriptedLLM([LLMResponse(content="第一条"), LLMResponse(content="第二条")]),
+        tools=[],
+    )
+
+    assert agent.chat("一") == "第一条"
+    assert agent.chat("二") == "第二条"
+
+    assert [record.round_index for record in agent.llm_rounds] == [1, 2]
 
 
 def test_context_compress():

@@ -18,7 +18,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from .agent import Agent
+from .agent import Agent, LLMRoundRecord
 from .coding_task import CodingTaskReport, CodingTaskRunner, CodingTaskState
 
 
@@ -146,6 +146,7 @@ class EvaluationResult:
     repository_context_recall: float | None
     verification: VerificationResult
     agent_response: str
+    llm_rounds: tuple[LLMRoundRecord, ...]
 
 
 @dataclass(frozen=True)
@@ -280,6 +281,7 @@ class CodingAgentEvaluator:
                 repository_context_recall=None,
                 verification=verification,
                 agent_response=f"Agent 初始化失败：{error_text}",
+                llm_rounds=(),
             )
             if not self.keep_workspaces:
                 shutil.rmtree(run_root, ignore_errors=True)
@@ -288,6 +290,7 @@ class CodingAgentEvaluator:
         completion_before = int(getattr(agent.llm, "total_completion_tokens", 0) or 0)
         cost_before = _estimated_cost(agent)
         message_start = len(agent.messages)
+        llm_round_start = len(agent.llm_rounds)
 
         try:
             task_report = CodingTaskRunner(
@@ -381,6 +384,7 @@ class CodingAgentEvaluator:
             repository_context_recall=repository_metrics.context_recall,
             verification=verification,
             agent_response=_sanitize_report_text(task_report.final_response, workspace, run_root),
+            llm_rounds=tuple(agent.llm_rounds[llm_round_start:]),
         )
         if not self.keep_workspaces:
             shutil.rmtree(run_root, ignore_errors=True)
@@ -599,6 +603,22 @@ def write_evaluation_report(
         lines.extend(["", "## Stability", "", "| Case | Passes | Runs | Pass rate |", "|---|---:|---:|---:|"])
         for item in stability:
             lines.append(f"| {item.case_id} | {item.passes} | {item.runs} | {item.pass_rate:.1%} |")
+    if any(result.llm_rounds for result in results):
+        lines.extend([
+            "",
+            "## LLM rounds",
+            "",
+            "| Case | Round | Prompt tokens | Completion tokens | Duration | Selected tools | Policy rejects |",
+            "|---|---:|---:|---:|---:|---|---:|",
+        ])
+        for result in results:
+            for record in result.llm_rounds:
+                tools = ", ".join(record.selected_tools) or "-"
+                lines.append(
+                    f"| {result.case_id} | {record.round_index} | {record.prompt_tokens} | "
+                    f"{record.completion_tokens} | {record.duration_seconds:.3f}s | "
+                    f"{tools.replace('|', '/')} | {record.rejected_tool_calls} |"
+                )
     markdown_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return json_path, markdown_path
 

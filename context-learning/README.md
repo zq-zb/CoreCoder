@@ -13,6 +13,7 @@
 - [09 · 规模基准与增量索引](09-scale-benchmark-incremental-index.md)：用大型合成仓库证明瓶颈，再按指纹差异只重读变化文件。
 - [10 · Agent 检索 A/B](10-retrieval-agent-ab.md)：修复真实评测未注册检索工具的缺口，并建立公平的 on/off 实验开关。
 - [13 · Guided 策略一致性](13-guided-policy-consistency.md)：用真实 Token 成本定位提示层与执行层漂移，修复安全守卫重建提示时丢失策略的问题。
+- [14 · 单轮 LLM 成本追踪](14-llm-round-observability.md)：把聚合 Token 拆到每次模型往返，关联工具决策、策略拒绝和耗时。
 - [11 · 真实检索实验](11-real-retrieval-experiment.md)：记录 DeepSeek 负结果、实验有效性检查、guided 运行时策略与报告脱敏。
 - [12 · guided 检索真实对照](12-guided-retrieval-ab.md)：验证运行时引导让模型真正采用检索，并诚实记录 Recall、Token 和证据边界。
 
@@ -103,3 +104,5 @@ Coding Agent 会不断读取文件、执行命令、接收错误并修改代码�
 16. 下一步：扩展到 3 个跨文件案例并重复运行，或先优化检索上下文的 Token 成本。
 17. 已完成：对 guided Token 增量做成本归因，修复工作区守卫导致的提示/执行策略漂移。
 18. 下一步：在相同案例上复测修复后的 guided，确认策略拒绝与输入 Token 是否下降。
+19. 已完成：真实复测验证首次选择检索，并把每轮 LLM 成本与工具决策接入评测报告。
+20. 下一步：使用单轮数据复测“首次单独检索”提示，判断拒绝轮次的真实 Token 成本。

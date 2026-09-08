@@ -228,10 +228,13 @@ def test_evaluation_report_contains_json_and_markdown_summary(tmp_path):
     payload = json.loads(json_path.read_text(encoding="utf-8"))
     assert payload["summary"]["success_rate"] == 1.0
     assert payload["results"][0]["case_id"] == "calculator-sign"
+    assert payload["results"][0]["llm_rounds"]
+    assert payload["results"][0]["llm_rounds"][0]["round_index"] == 1
     markdown = markdown_path.read_text(encoding="utf-8")
     assert "Success rate: 100.0%" in markdown
     assert "Repository cache hit rate: n/a" in markdown
     assert "Cache H/B/I/R" in markdown
+    assert "## LLM rounds" in markdown
     assert "calculator-sign" in markdown
 
 
