@@ -108,6 +108,8 @@ def test_evaluator_independently_verifies_success_and_collects_metrics():
     assert result.hidden_tests_passed is True
     assert result.changed_files == ("calculator.py",)
     assert result.tool_calls == 3
+    assert result.llm_rounds[-1].selected_tools == ("bash",)
+    assert all(record.selected_tools for record in result.llm_rounds)
     assert result.failed_test_runs == 0
     assert result.duration_seconds > 0
     assert result.context_compressions == 0

@@ -298,6 +298,8 @@ class CodingAgentEvaluator:
                 workspace,
                 max_fix_attempts=case.max_fix_attempts,
                 require_changes=True,
+                # 相关测试通过后由状态机确定性收敛，避免额外调用模型重复总结。
+                stop_after_verified=True,
             ).run(case.task)
         except Exception as error:
             task_report = CodingTaskReport(
